@@ -5,10 +5,13 @@ import asyncio
 from discord import app_commands
 from discord.ext import commands
 
+# __file__ = 현재 이 파일의 경로
+# os.path.dirname(xxx) = xxx가 속해있는 디렉토리의 경로
+PATH = os.path.dirname(__file__)
 # 봇
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='^', intents=intents)
-with open('token.txt', 'r') as f:
+with open(os.path.join(PATH, 'token.txt'), 'r') as f:
     TOKEN = f.read()
     # token.txt에 봇의 토큰을 입력해주세요.
 
@@ -19,7 +22,7 @@ async def main():
             await bot.load_extension(f'Cogs.{py[:-3]}')
 
 # guilds.txt에 서버 ID를 한 줄씩 적어주세요.
-with open('guilds.txt', 'r') as f:
+with open(os.path.join(PATH, 'guilds.txt'), 'r') as f:
     GUILDS = list(f.read().split('\n'))
 GUILDS = [discord.Object(id=i) for i in GUILDS]
 
