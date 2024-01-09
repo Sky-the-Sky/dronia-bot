@@ -1,7 +1,11 @@
 import random
 import os
+import json
 import discord
 import asyncio
+import time
+import datetime
+from collections import defaultdict
 from discord import app_commands
 from discord.ext import commands
 from html2image import Html2Image
@@ -191,7 +195,10 @@ css = """body{}"""
 # screenshot an HTML string (css is optional)
 hti.screenshot(html_str=html, css_str=css, save_as='page.png')
 
-
+#client = discord.Client(intents=discord.Intents.all())
+loggingChannel = {}
+loggingChannelHasChanged = defaultdict(lambda:False,{})
+firstRun = True
 # __file__ = 현재 이 파일의 경로
 # os.path.dirname(xxx) = xxx가 속해있는 디렉토리의 경로
 PATH = os.path.dirname(__file__)
@@ -211,10 +218,20 @@ async def main():
 # guilds.txt에 서버 ID를 한 줄씩 적어주세요.
 with open(os.path.join(PATH, 'guilds.txt'), 'r') as f:
     GUILDS = list(f.read().split('\n'))
+for g in GUILDS:
+    #print(g)
+    if os.path.exists(f'Data/data_{g}.json'):
+        with open(f'Data/data_{g}.json', encoding='utf-8') as j:
+            jsonData = json.load(j)
+    else:
+        continue
+    loggingChannel[int(g)] = jsonData["LoggingChannel"]
 GUILDS = [discord.Object(id=i) for i in GUILDS]
 
 with open(os.path.join(PATH,'players.txt'),'r') as f:
     PLAYERS = list(f.read().split('\n'))
+
+
 
 def roll(min:int,max:int,num:int):
     res = 0
@@ -246,7 +263,10 @@ def dice(min: int, max: int, num: int, exp: str,rollcrit:bool=False):
             textList[0] = f'다음은 {min}~{max} 사이의 주사위를 {num}개 굴리고 \'{expText}\' 연산을 한 결과입니다.'
         for i in range(num):
             result = eval('random.randrange(min, max + 1)' + exp)
-            if exp == '':
+            rexp = exp.replace('+','-') if '+' in exp else exp.replace('-','+')
+            if rollcrit and (eval(f"{result}"+rexp)==max):
+                textList.append(f'{i+1}번째 주사위: **{eval(f"{result}"+rexp)}** (대성공)')
+            elif exp == '':
                 textList.append(f'{i+1}번째 주사위: {result}')
             else:
                 textList.append(f'{i+1}번째 주사위 ({expText}): {result}')
@@ -351,53 +371,66 @@ class exprError(Exception):
 
     def __str__(self):
         return 'ExprError: ' + self.message
+class exprErrorParen(Exception):
+    def __init__(self, message='괄호가 비었잖아'):
+        self.message = message
 
-@bot.command(name='ㅈㅅ',aliases=['주사위식','주식','ㅅ'])
-async def rollDiceAlt2(ctx, *args):
-    query = ''.join(args)
-    try:
-        if query.isdigit():
-            raise isDigit
-        die = [] #주사위
-        val = [] #값
-        tv = [] # temp 값
-        opt = [] #연산자
-        #viter = 0
-        #oiter = 0
-        dnum = 0
-        dmax = 0
-        dmin = 1 #for default
-        skipTO = False #skip til next operator
-        calcMin = False
-        firstHalf = 0
-        for i in range(0,len(query)):
-            if query[i] in '[':
-                if skipTO:
-                    if tv != []:
-                        raise exprError
-                    calcMin = True
-                    firstHalf = 0
-                    continue
+    def __str__(self):
+        return 'ExprError: ' + self.message
+
+class tooMuchRecurrance(Exception):
+    def __init__(self, message='괄호 개수가 왜이래'):
+        self.message = message
+
+    def __str__(self):
+        return 'RecurError: ' + self.message
+
+async def subRollDiceFunc(recur,die,val,opt,query):
+    if len(query) == 0:
+        raise exprError
+    tv = []
+    paren = []
+    dnum = 0
+    dmax = 0
+    dmin = 1 #for default
+    skipTO = False #skip til next operator
+    calcMin = False
+    isParen = False
+    parens = 1
+    firstHalf = 0
+    debug = False
+    for i in range(0,len(query)):
+        if debug:
+            print(f'현재 처리 중: {query[i]}')
+        if query[i] in ')':
+            parens = parens - 1
+            if parens != 0:
+                paren.append(query[i])
+                continue
+            if not isParen:
+                raise exprError
+            if paren == []:
+                raise exprErrorParen
+            val.append(await subRollDiceAlt2(recur+1,''.join(paren)))
+            isParen = False
+            if debug:
+                print(f'parentheses 닫힘.')
+            continue
+        if isParen:
+            if query[i] in '(':
+                parens = parens + 1
+            paren.append(query[i])
+            if debug:
+                print(f'paren 배열 진입: {query[i]}')
+            continue
+        if query[i] in '(':
+            parens = 1
+            if tv != []:
+                if not skipTO:
+                    val.append(''.join(tv))
+                    tv = []
+                    opt.append('*')
                 else:
-                    raise exprError
-            elif query[i] == '.':
-                if skipTO and firstHalf < 2 and calcMin:
-                    firstHalf = firstHalf + 1
-                    if firstHalf == 1:
-                        if tv == []:
-                            raise exprError
-                        dmin = eval(''.join(tv))
-                        tv=[]
-                    continue
-                else:
-                    raise exprError
-            elif query[i] in ']':
-                if skipTO and firstHalf == 2 and calcMin and tv != []:
-                    continue
-                else:
-                    raise exprError
-            elif query[i] in '+-/*':
-                if skipTO:
                     dmax = eval(''.join(tv))
                     tv = []
                     skipTO=False
@@ -411,31 +444,43 @@ async def rollDiceAlt2(ctx, *args):
                         die.append(str(dnum)+"d"+str(dmax))
                     val.append(str(roll(dmin,dmax,dnum)))
                     dmin = 1
-                else:
-                    if tv != []:
-                        val.append(''.join(tv))
-                        tv = []
-                opt.append(query[i])
-                continue
+                    opt.append('*')
+            if query[i-1] in ')':
+                opt.append('*')
+            paren = []
+            isParen = True
+            if debug:
+                print(f'parentheses 열림.')
+            continue
+        if query[i] in '[':
             if skipTO:
-                if query[i].isdigit():
-                    tv.append(query[i])
-                else:
+                if tv != []:
                     raise exprError
+                calcMin = True
+                firstHalf = 0
                 continue
-            if query[i].isdigit():
-                tv.append(query[i])
-                continue
-            if query[i] == 'd' or query[i] == 'D':
-                dnum = eval(''.join(tv))
-                tv = []
-                skipTO = True
             else:
                 raise exprError
-        if query[len(query)-1] in '+-/*':
-            raise exprError
-        if tv != []:
-            if skipTO:
+        elif query[i] == '.':
+            if skipTO and firstHalf < 2 and calcMin:
+                firstHalf = firstHalf + 1
+                if firstHalf == 1:
+                    if tv == []:
+                        raise exprError
+                    dmin = eval(''.join(tv))
+                    tv=[]
+                continue
+            else:
+                raise exprError
+        elif query[i] in ']':
+            if skipTO and firstHalf == 2 and calcMin and tv != []:
+                continue
+            else:
+                raise exprError
+        elif query[i] in '+-/*':
+            if query[i-1] in ')':
+                pass
+            elif skipTO:
                 dmax = eval(''.join(tv))
                 tv = []
                 skipTO=False
@@ -448,9 +493,84 @@ async def rollDiceAlt2(ctx, *args):
                 else:
                     die.append(str(dnum)+"d"+str(dmax))
                 val.append(str(roll(dmin,dmax,dnum)))
+                dmin = 1
             else:
-                val.append(''.join(tv))
-                tv = []
+                if tv != []:
+                    val.append(''.join(tv))
+                    tv = []
+            opt.append(query[i])
+            continue
+        if skipTO:
+            if query[i].isdigit():
+                tv.append(query[i])
+            else:
+                raise exprError
+            continue
+        if query[i].isdigit():
+            if query[i-1] in ')':
+                opt.append('*')
+            tv.append(query[i])
+            continue
+        if query[i] == 'd' or query[i] == 'D':
+            dnum = eval(''.join(tv))
+            tv = []
+            skipTO = True
+        else:
+            raise exprError
+    if isParen:
+        raise exprError
+    if query[-1] in '+-/*':
+        raise exprError
+    if tv != []:
+        if skipTO:
+            dmax = eval(''.join(tv))
+            tv = []
+            skipTO=False
+            if calcMin:
+                if dmin>dmax:
+                    raise exprError
+                die.append(f"{dnum}d[{dmin}..{dmax}]")
+                calcMin = False
+                firstHalf = 0
+            else:
+                die.append(str(dnum)+"d"+str(dmax))
+            val.append(str(roll(dmin,dmax,dnum)))
+        else:
+            val.append(''.join(tv))
+            tv = []
+
+async def subRollDiceAlt2(recur,query):
+    if recur > 6:
+        raise tooMuchRecurrance
+    if query.isdigit():
+        return query
+    die = [] #주사위
+    val = [] #값
+    #tv = [] # temp 값
+    opt = [] #연산자
+    #viter = 0
+    #oiter = 0
+    await subRollDiceFunc(recur,die,val,opt,query)
+    res = ""
+    for i in range(0,len(val)):
+        res = res + val[i]
+        if i != len(val)-1:
+            res = res + opt[i]
+    return str(eval(res))
+
+@bot.command(name='ㅈㅅ',aliases=['주사위식','주식','ㅅ','r','ㄱ'])
+async def rollDiceAlt2(ctx, *args):
+    query = ''.join(args)
+    try:
+        if query.isdigit():
+            raise isDigit
+        die = [] #주사위
+        val = [] #값
+        #tv = [] # temp 값
+        opt = [] #연산자
+        #viter = 0
+        #oiter = 0
+        await subRollDiceFunc(0,die,val,opt,query)
         res = ""
         print(die)
         print(val)
@@ -467,11 +587,87 @@ async def rollDiceAlt2(ctx, *args):
         await ctx.send("표현식이 올바르지 않습니다.", reference=ctx.message, mention_author=False)
     except isDigit:
         await ctx.send(f"다음 쿼리는 상수입니다: `{query}`", reference=ctx.message, mention_author=False)
+    except tooMuchRecurrance:
+        await ctx.send("괄호는 최대 6번 중첩시킬 수 있습니다.", reference=ctx.message, mention_author=False)
+    except exprErrorParen:
+        await ctx.send("괄호 안에는 하나 이상의 표현식이 존재해야 합니다.", reference=ctx.message, mention_author=False)
+    finally:
+        if ctx.channel.id == 1077942754254004246:
+            await ctx.send("# 잠깐만요!\n여긴 봇 채널이 아닌 것 같아요.\n만약 채널을 착각하셨거나 의도하신 게 아니라면, 원활한 대화를 위해 <#1104426926396944464>로 가서 이 명령어를 써 주세요!",delete_after = 60)
+            
 
 @bot.command(name='ㅍ',aliases=['판정','ㅍㅈ'])
 async def rollDiceAlt(ctx, min: int=1, max: int=12, num: int = 1, exp: str=''):
     await ctx.send(dice(min, max, num,exp,True), reference=ctx.message, mention_author=False)
 
+@bot.tree.command(name='registerlogchannel', description='명령어를 사용한 채널을 로깅 채널로 지정합니다.', guilds=GUILDS)
+@app_commands.describe()
+async def registerLogChannel(interaction: discord.Interaction):
+    global loggingChannelHasChanged
+    gui = interaction.guild_id
+    loggingChannelHasChanged[gui] = True
+    cha = interaction.channel_id
+    if os.path.exists(f'Data/data_{gui}.json'):
+        with open(f'Data/data_{gui}.json', encoding='utf-8') as j:
+            jsonData = json.load(j)
+    else:
+        jsonData = {}
+    jsonData["Logging"] = True
+    jsonData["LoggingChannel"] = cha
+    with open(f'Data/data_{gui}.json', 'w', encoding='utf-8') as j:
+        json.dump(jsonData, j, ensure_ascii=False)
+    await interaction.response.send_message(f"로깅 채널을 <#{cha}>로 설정했습니다.`",ephemeral=True)
+
+@bot.event
+async def on_message_delete(message):
+    if message.content == None or message.content == "":
+        return
+    if message.content[0] == '^':
+        return
+    global loggingChannelHasChanged
+    global loggingChannel
+    gui = message.guild.id
+    if loggingChannelHasChanged[gui]:
+        loggingChannelHasChanged[gui] = False
+        if os.path.exists(f'Data/data_{gui}.json'):
+            with open(f'Data/data_{gui}.json', encoding='utf-8') as j:
+                jsonData = json.load(j)
+        else:
+            jsonData = {}
+        if jsonData["Logging"] == None or jsonData["Logging"] == False:
+            return
+        loggingChannel[gui] = jsonData["LoggingChannel"]
+    channel_id = loggingChannel[gui]
+    embed=discord.Embed(title="삭제 기록", description=f"작성자: `{message.author.name}`", color=0xAF0000, timestamp=datetime.datetime.now())
+    embed.add_field(name="메시지 내용",value=message.content,inline=True)
+    embed.add_field(name="채널",value=f"<#{message.channel.id}>",inline=True)
+    channel=bot.get_channel(channel_id)
+    await channel.send(embed=embed)
+
+@bot.event
+async def on_message_edit(before, after):
+    if after.content == None or after.content == "":
+        return
+    global loggingChannelHasChanged
+    global loggingChannel
+    gui = before.guild.id
+    if loggingChannelHasChanged[gui]:
+        loggingChannelHasChanged[gui] = False
+        if os.path.exists(f'Data/data_{gui}.json'):
+            with open(f'Data/data_{gui}.json', encoding='utf-8') as j:
+                jsonData = json.load(j)
+        else:
+            jsonData = {}
+        if jsonData["Logging"] == None or jsonData["Logging"] == False:
+            return
+        loggingChannel[gui] = jsonData["LoggingChannel"]
+    channel_id = loggingChannel[gui]
+    embed=discord.Embed(title="수정 기록", description=f"작성자: `{before.author.name}`", color=0xFFA500, timestamp=datetime.datetime.now())
+    embed.add_field(name="채널",value=f"<#{before.channel.id}>",inline=False)
+    embed.add_field(name="이전 내용",value=before.content,inline=False)
+    embed.add_field(name="바뀐 내용",value=after.content,inline=False)
+    channel=bot.get_channel(channel_id)
+    await channel.send(embed=embed)
 #@bot.command(name='판정')
 #async def rollDiceAlt2(ctx, min: int, max: int, num: int = 1, exp: str=''):
 #    await ctx.send(dice(min, max, num,exp,True), reference=ctx.message, mention_author=False)
@@ -480,10 +676,54 @@ async def rollDiceAlt(ctx, min: int=1, max: int=12, num: int = 1, exp: str=''):
 #async def rollDice3(ctx, min: int, max: int, num: int = 1, exp: str='',rollcrit:bool=False):
 #    await ctx.send(dice(min, max, num,exp,rollcrit), reference=ctx.message, mention_author=False)
 
-@commands.command(name='어')
-async def howDoThis(self, ctx):
+@bot.command(name='어',aliases=['ㅇㅇ','d','ㅇ'])
+async def howDoThis(ctx,*args):
+    what = ' '.join(args)
     await ctx.message.delete()
-    await ctx.send('```어떻게 하시겠습니까?```')
+    if what != '':
+        await ctx.send(f'```어떻게 {what}하시겠습니까?```')
+    else:
+        await ctx.send('```어떻게 하시겠습니까?```')
 
+@bot.command(name='대',aliases=['ㄷ','e','대응'])
+async def howDoThis_Alt(ctx):
+    await ctx.message.delete()
+    await ctx.send('```어떻게 대응하시겠습니까?```')
+
+@bot.command(name='낙석',aliases=['낙','ㄴ'])
+async def rayPenbar(ctx,name:str='마스터',reason:str='낙석'):
+    await ctx.message.delete()
+    fjon = ''
+    sjon = ''
+    if not (44032<=ord(name[-1])<=55203):
+        fjon='은(는)'
+    elif (ord(name[-1])-44032)%28==0:
+        fjon='는'
+    else:
+        fjon='은'
+    if not (44032<=ord(name[-1])<=55203):
+        sjon='(으)로'
+    elif (ord(reason[-1])-44032)%28==0:
+        sjon='로'
+    else:
+        sjon='으로'
+    if reason == '번개':
+        await ctx.send(f'```{name}{fjon} 번개에 직격당하여 그만 사망하고 말았습니다```')
+    else:
+        await ctx.send(f'```{name}{fjon} {reason}{sjon} 인해 그만 사망하고 말았습니다```')
+    if name=='마스터':
+        num = roll(1,100,1)
+        if num == 82:
+            time.sleep(2)
+            await ctx.send(f'```...그럼 이제 마스터링은 누가 해주지?```')
+            time.sleep(6)
+            await ctx.send(f'```아```')
+
+
+
+
+#@bot.command(name='증거인멸',aliases=['증'])
+#async def deleteMsg(ctx, sec=0.2):
+#    await ctx.message.delete()
 asyncio.run(main())
 bot.run(TOKEN)

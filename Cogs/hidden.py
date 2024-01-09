@@ -12,6 +12,7 @@ def urlToImage(url):
 class hiddenCommand(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.playing = False
 
     @commands.command(name='패배자')
     async def taunt(self, ctx):
@@ -38,10 +39,32 @@ class hiddenCommand(commands.Cog):
             await ctx.send(file=urlToImage('https://cdn.discordapp.com/attachments/1077942754254004246/1146798019430318140/1.jpg'))
 
             
-
+    @commands.command(name='재생',aliases=['브금','play','p','bgm'])
+    async def play(self,ctx,mus=''):
+        author = ctx.author
+        if ctx.voice_client is not None:
+            voice = ctx.voice_client
+        elif author.voice.channel is not None:
+            voiceid = author.voice.channel
+            voice = await voiceid.connect()
+        else:
+            return
+        def repeat(guild, voice, audio):
+            voice.play(audio, after=lambda e: repeat(guild, voice, audio))
+        if mus == '백진혼':
+            audio = discord.FFmpegPCMAudio('BGM/frost-theme.opus')
+        if audio == None:
+            self.playing = False
+            ctx.send('해당하는 곡이 존재하지 않습니다.', reference=ctx.message, mention_author=False)
+        else:
+            self.playing = True
+            voice.play(audio, after=lambda e: repeat(ctx.guild, voice, audio))
 
     @commands.command(name='mte')
     async def MTE(self, ctx):
+        if self.playing:
+            await ctx.send('BGM이 재생되는 중입니다.', reference=ctx.message, mention_author=False)
+            return
         author = ctx.author
         MTE = discord.FFmpegPCMAudio('MTE World.opus')
         if ctx.voice_client is not None:
@@ -53,11 +76,6 @@ class hiddenCommand(commands.Cog):
             voiceClient = await voiceChannel.connect()
             voiceClient.play(MTE)
 
-    @commands.command(name='ㅇ')
-    async def eoYeojada(self, ctx):
-        await ctx.message.delete()
-        await ctx.send('```어떻게 하시겠습니까?```')
-
     @commands.command(name='번개')
     async def lightning(self, ctx):
         await ctx.message.delete()
@@ -65,6 +83,9 @@ class hiddenCommand(commands.Cog):
 
     @commands.command(name='엄')
     async def umjunsik(self, ctx):
+        if self.playing:
+            await ctx.send('BGM이 재생되는 중입니다.', reference=ctx.message, mention_author=False)
+            return
         author = ctx.author
         um = discord.FFmpegPCMAudio('um.opus')
         await ctx.message.delete()
@@ -79,6 +100,9 @@ class hiddenCommand(commands.Cog):
         
     @commands.command(name='그런데')
     async def however(self, ctx, who=''):
+        if self.playing:
+            await ctx.send('BGM이 재생되는 중입니다.', reference=ctx.message, mention_author=False)
+            return
         author = ctx.author
         dic = {
             '체인소맨': ('Kickback.opus', '그런데 그때 체인소맨이 나타났다'),
@@ -106,8 +130,9 @@ class hiddenCommand(commands.Cog):
             voiceClient.play(music)
         await ctx.send(sending)
 
-    @commands.command(name='나가')
+    @commands.command(name='나가', aliases=['ㄴㄱ'])
     async def getOut(self, ctx):
+        self.playing = False
         voiceClient = ctx.voice_client
         if voiceClient.is_connected():
             await voiceClient.disconnect()
