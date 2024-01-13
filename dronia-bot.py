@@ -707,7 +707,7 @@ async def rayPenbar(ctx,name:str='마스터',reason:str='낙석'):
         sjon='로'
     else:
         sjon='으로'
-    if reason == '번개':
+    if reason == '번개' or reason == '낙뢰':
         await ctx.send(f'```{name}{fjon} 번개에 직격당하여 그만 사망하고 말았습니다```')
     else:
         await ctx.send(f'```{name}{fjon} {reason}{sjon} 인해 그만 사망하고 말았습니다```')
@@ -719,9 +719,81 @@ async def rayPenbar(ctx,name:str='마스터',reason:str='낙석'):
             time.sleep(6)
             await ctx.send(f'```아```')
 
+@bot.command(name='불',aliases=['ㅂ','얼음','f'])
+async def fuckOff(ctx,addition=0):
+    await ctx.message.delete()
+    if ctx.author.guild_permissions.manage_channels == False:
+        return
+    target = ctx.channel
+    role = discord.utils.get(ctx.guild.roles, name="@everyone")
+    if target.permissions_for(role).send_messages is True:
+        await target.set_permissions(role,send_messages=False)
+        if addition:
+            t = roll(1,3,1)
+            if t == 3:
+                t = roll(1,3,1)
+            if t == 3:
+                t = roll(1,3,1)
+            if t == 1:
+                await ctx.send('던전의 불을 끌 시간')
+            elif t == 2:
+                await ctx.send('던전의')
+                time.sleep(0.7)
+                await ctx.send('불을')
+                time.sleep(1.1)
+                await ctx.send('끌 시간')
+            else:
+                await ctx.send('얼린 대구')
+    else:
+        await target.set_permissions(role,send_messages=True)
+        if addition:
+            t = roll(1,3,1)
+            if t == 3:
+                t = roll(1,3,1)
+            if t == 3:
+                t = roll(1,3,1)
+            if t == 1 or t == 2:
+                await ctx.send('던전의 불을 지필 시간')
+            else:
+                await ctx.send('대구통구이')
 
-
-
+@bot.command(name='던전',aliases=['던'])
+async def fuckOffVariant(ctx,addition=1):
+    await ctx.message.delete()
+    if ctx.author.guild_permissions.manage_channels == False:
+        return
+    target = ctx.channel
+    role = discord.utils.get(ctx.guild.roles, name="@everyone")
+    if target.permissions_for(role).send_messages is True:
+        await target.set_permissions(role,send_messages=False)
+        if addition:
+            t = roll(1,3,1)
+            if t == 3:
+                t = roll(1,3,1)
+            if t == 3:
+                t = roll(1,3,1)
+            if t == 1:
+                await ctx.send('던전의 불을 끌 시간')
+            elif t == 2:
+                await ctx.send('던전의')
+                time.sleep(0.7)
+                await ctx.send('불을')
+                time.sleep(1.1)
+                await ctx.send('끌 시간')
+            else:
+                await ctx.send('얼린 대구')
+    else:
+        await target.set_permissions(role,send_messages=True)
+        if addition:
+            t = roll(1,3,1)
+            if t == 3:
+                t = roll(1,3,1)
+            if t == 3:
+                t = roll(1,3,1)
+            if t == 1 or t == 2:
+                await ctx.send('던전의 불을 지필 시간')
+            else:
+                await ctx.send('대구통구이')
 #@bot.command(name='증거인멸',aliases=['증'])
 #async def deleteMsg(ctx, sec=0.2):
 #    await ctx.message.delete()
