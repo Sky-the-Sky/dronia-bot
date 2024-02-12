@@ -622,7 +622,7 @@ async def registerLogChannel(interaction: discord.Interaction):
 async def on_message_delete(message):
     if message.content == None or message.content == "":
         return
-    if message.content[0] == '^':
+    if message.content[0] == '^' and (message.content[1] == 'ㅇ' or message.content[1] == 'ㄷ'):
         return
     global loggingChannelHasChanged
     global loggingChannel
@@ -709,6 +709,24 @@ async def rayPenbar(ctx,name:str='마스터',reason:str='낙석'):
         sjon='으로'
     if reason == '번개' or reason == '낙뢰':
         await ctx.send(f'```{name}{fjon} 번개에 직격당하여 그만 사망하고 말았습니다```')
+    elif reason == '그냥':
+        t = roll(1,5,1)
+        if t == 1:
+            await ctx.send(f'```{name}이(가) 세계 밖으로 떨어졌습니다```')
+        elif t == 2:
+            await ctx.send(f'```ZAPZAPZAP → {name}```')
+        elif t == 3:
+            await ctx.send(f'```d/dx{name}```')
+        elif t == 4:
+            await ctx.send(f'```{name} 아웃, {name} 아웃```')
+        elif t == 5:
+            await ctx.send(f'```{name}의 마음이 무너졌어...```')
+    elif reason == 'paranoia' or reason == '파라노이아':
+        await ctx.send(f'```ZAPZAPZAP → {name}```')
+    elif reason == '/kill':
+        await ctx.send(f'```{name}이(가) 세계 밖으로 떨어졌습니다```')
+    elif reason == '루디':
+        await ctx.send(f'```{name}의 마음이 무너졌어...```')
     else:
         await ctx.send(f'```{name}{fjon} {reason}{sjon} 인해 그만 사망하고 말았습니다```')
     if name=='마스터':
