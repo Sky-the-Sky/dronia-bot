@@ -511,7 +511,7 @@ async def subRollDiceFunc(recur,die,val,opt,query):
                 opt.append('*')
             tv.append(query[i])
             continue
-        if query[i] == 'd' or query[i] == 'D':
+        if query[i] == 'd' or query[i] == 'D' or query[i] == 'ㅇ':
             dnum = eval(''.join(tv))
             tv = []
             skipTO = True
@@ -711,16 +711,17 @@ async def rayPenbar(ctx,name:str='마스터',reason:str='낙석'):
         await ctx.send(f'```{name}{fjon} 번개에 직격당하여 그만 사망하고 말았습니다```')
     elif reason == '그냥':
         t = roll(1,5,1)
-        if t == 1:
-            await ctx.send(f'```{name}이(가) 세계 밖으로 떨어졌습니다```')
-        elif t == 2:
-            await ctx.send(f'```ZAPZAPZAP → {name}```')
-        elif t == 3:
-            await ctx.send(f'```d/dx{name}```')
-        elif t == 4:
-            await ctx.send(f'```{name} 아웃, {name} 아웃```')
-        elif t == 5:
-            await ctx.send(f'```{name}의 마음이 무너졌어...```')
+        match t:
+            case 1:
+                await ctx.send(f'```{name}이(가) 세계 밖으로 떨어졌습니다```')
+            case 2:
+                await ctx.send(f'```ZAPZAPZAP → {name}```')
+            case 3:
+                await ctx.send(f'```d/dx{name}```')
+            case 4:
+                await ctx.send(f'```{name} 아웃, {name} 아웃```')
+            case 5:
+                await ctx.send(f'```{name}의 마음이 무너졌어...```')
     elif reason == 'paranoia' or reason == '파라노이아':
         await ctx.send(f'```ZAPZAPZAP → {name}```')
     elif reason == '/kill':
