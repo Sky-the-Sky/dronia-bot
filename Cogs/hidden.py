@@ -29,16 +29,14 @@ class hiddenCommand(commands.Cog):
     @commands.command(name='지도')
     async def map(self, ctx, type=''):
         await ctx.message.delete()
-        if type == '지옥':
-            await ctx.send(file=urlToImage('https://cdn.discordapp.com/attachments/1104717483061026837/1106555208143745104/e24f0496bb2317b5.jpg'))
-        elif type == '동양':
-            await ctx.send(file=urlToImage('https://cdn.discordapp.com/attachments/1077942754254004246/1146798040481542255/570c2bc50d57e3fc.jpg'))
+        if type == '동양':
+            await ctx.send(file=discord.File('map 2.png'))
         elif type == '신대륙':
-            await ctx.send(file=urlToImage('https://cdn.discordapp.com/attachments/1077942754254004246/1146798051034419260/4d9b7f713ad78c19.jpg'))
+            await ctx.send(file=discord.File('map 3.png'))
         elif type == '남대륙':
-            await ctx.send(file=urlToImage('https://cdn.discordapp.com/attachments/1104717483061026837/1184129334097743993/4_.jpg?ex=65dde7e1&is=65cb72e1&hm=3161d9450a1b27aa65bcd875170c7dc9ef5e0fe5d392fda2190011fe92fcd379&'))
+            await ctx.send(file=discord.File('map 4.png'))
         else:
-            await ctx.send(file=urlToImage('https://cdn.discordapp.com/attachments/1077942754254004246/1146798019430318140/1.jpg'))
+            await ctx.send(file=discord.File('map 1.png'))
 
             
     @commands.command(name='재생',aliases=['브금','play','p','bgm'])
