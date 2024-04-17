@@ -29,14 +29,15 @@ class hiddenCommand(commands.Cog):
     @commands.command(name='지도')
     async def map(self, ctx, type=''):
         await ctx.message.delete()
-        if type == '동양':
-            await ctx.send(file=discord.File('map 2.png'))
-        elif type == '신대륙':
-            await ctx.send(file=discord.File('map 3.png'))
-        elif type == '남대륙':
-            await ctx.send(file=discord.File('map 4.png'))
-        else:
-            await ctx.send(file=discord.File('map 1.png'))
+        match type:
+            case '동양':
+                await ctx.send(file=discord.File('map 2.jpg'))
+            case '신대륙':
+                await ctx.send(file=discord.File('map 3.jpg'))
+            case '남대륙':
+                await ctx.send(file=discord.File('map 4.jpg'))
+            case _:
+                await ctx.send(file=discord.File('map 1.jpg'))
 
             
     @commands.command(name='재생',aliases=['브금','play','p','bgm'])
