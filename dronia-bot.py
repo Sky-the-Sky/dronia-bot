@@ -597,8 +597,15 @@ async def rollDiceAlt2(ctx, *args):
             
 
 @bot.command(name='ㅍ',aliases=['판정','ㅍㅈ'])
-async def rollDiceAlt(ctx, min: int=1, max: int=12, num: int = 1, exp: str=''):
-    await ctx.send(dice(min, max, num,exp,True), reference=ctx.message, mention_author=False)
+async def rollDiceAlt(ctx, min:str ="1", max:int = 1, num:int = 1, exp:str=''):
+    if min.isdigit():
+        if max == int(min):
+            max = 12
+        await ctx.send(dice(int(min),max,num,exp,True), reference=ctx.message, mention_author=False)
+    else:
+        await ctx.send(dice(1,12,max,min,True), reference=ctx.message, mention_author=False)
+
+
 
 @bot.tree.command(name='registerlogchannel', description='명령어를 사용한 채널을 로깅 채널로 지정합니다.', guilds=GUILDS)
 @app_commands.describe()
@@ -730,9 +737,9 @@ async def rayPenbar(ctx,name:str='마스터',reason:str='낙석'):
         await ctx.send(f'```{name}의 마음이 무너졌어...```')
     else:
         await ctx.send(f'```{name}{fjon} {reason}{sjon} 인해 그만 사망하고 말았습니다```')
-    if name=='마스터':
+    if name=='마스터' or name=='드로니아' or name=='dronia':
         num = roll(1,100,1)
-        if num == 82:
+        if num == 92:
             time.sleep(2)
             await ctx.send(f'```...그럼 이제 마스터링은 누가 해주지?```')
             time.sleep(6)
