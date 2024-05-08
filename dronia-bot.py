@@ -231,7 +231,20 @@ GUILDS = [discord.Object(id=i) for i in GUILDS]
 with open(os.path.join(PATH,'players.txt'),'r') as f:
     PLAYERS = list(f.read().split('\n'))
 
-
+def getLoggingChannel(gui:int):
+    global loggingChannelHasChanged
+    global loggingChannel
+    if loggingChannelHasChanged[gui]:
+        loggingChannelHasChanged[gui] = False
+        if os.path.exists(f'Data/data_{gui}.json'):
+            with open(f'Data/data_{gui}.json', encoding='utf-8') as j:
+                jsonData = json.load(j)
+        else:
+            jsonData = {}
+        if jsonData["Logging"] == None or jsonData["Logging"] == False:
+            return
+        loggingChannel[gui] = jsonData["LoggingChannel"]
+    return loggingChannel[gui]
 
 def roll(min:int,max:int,num:int):
     res = 0
@@ -597,7 +610,7 @@ async def rollDiceAlt2(ctx, *args):
             
 
 @bot.command(name='ㅍ',aliases=['판정','ㅍㅈ'])
-async def rollDiceAlt(ctx, min:str ="1", max:int = 1, num:int = 1, exp:str=''):
+async def rollDiceVariant(ctx, min:str ="1", max:int = 1, num:int = 1, exp:str=''):
     if min.isdigit():
         if max == int(min):
             max = 12
@@ -631,49 +644,32 @@ async def on_message_delete(message):
         return
     if message.content[0] == '^' and (message.content[1] == 'ㅇ' or message.content[1] == 'ㄷ'):
         return
-    global loggingChannelHasChanged
-    global loggingChannel
-    gui = message.guild.id
-    if loggingChannelHasChanged[gui]:
-        loggingChannelHasChanged[gui] = False
-        if os.path.exists(f'Data/data_{gui}.json'):
-            with open(f'Data/data_{gui}.json', encoding='utf-8') as j:
-                jsonData = json.load(j)
-        else:
-            jsonData = {}
-        if jsonData["Logging"] == None or jsonData["Logging"] == False:
-            return
-        loggingChannel[gui] = jsonData["LoggingChannel"]
-    channel_id = loggingChannel[gui]
-    embed=discord.Embed(title="삭제 기록", description=f"작성자: `{message.author.name}`", color=0xAF0000, timestamp=datetime.datetime.now())
-    embed.add_field(name="메시지 내용",value=message.content,inline=True)
-    embed.add_field(name="채널",value=f"<#{message.channel.id}>",inline=True)
+    channel_id = getLoggingChannel(message.guild.id)
     channel=bot.get_channel(channel_id)
-    await channel.send(embed=embed)
+    if len(message.content)<=1024:
+        embed=discord.Embed(title="삭제 기록", description=f"작성자: `{message.author.name}`", color=0xAF0000, timestamp=datetime.datetime.now())
+        embed.add_field(name="메시지 내용",value=message.content,inline=True)
+        embed.add_field(name="채널",value=f"<#{message.channel.id}>",inline=True)
+        await channel.send(embed=embed)
+    else:
+        channel.send(f"## 삭제 기록\n### (너무 길어서 엠베드하지 못했습니다...)\n작성자: `{message.author.name}`\n메시지 내용:\n```{message.content}```\n채널:<#{message.channel.id}>")
 
 @bot.event
 async def on_message_edit(before, after):
     if after.content == None or after.content == "":
         return
-    global loggingChannelHasChanged
-    global loggingChannel
-    gui = before.guild.id
-    if loggingChannelHasChanged[gui]:
-        loggingChannelHasChanged[gui] = False
-        if os.path.exists(f'Data/data_{gui}.json'):
-            with open(f'Data/data_{gui}.json', encoding='utf-8') as j:
-                jsonData = json.load(j)
-        else:
-            jsonData = {}
-        if jsonData["Logging"] == None or jsonData["Logging"] == False:
-            return
-        loggingChannel[gui] = jsonData["LoggingChannel"]
-    channel_id = loggingChannel[gui]
+    channel_id = getLoggingChannel[before.guild.id]
+    channel=bot.get_channel(channel_id)
+    resb = before.content
+    resa = after.content
+    if len(before.content)>1024:
+        resb = before.content[:1024]
+    if len(after.content)>1024:
+        resa = after.content[:1024]
     embed=discord.Embed(title="수정 기록", description=f"작성자: `{before.author.name}`", color=0xFFA500, timestamp=datetime.datetime.now())
     embed.add_field(name="채널",value=f"<#{before.channel.id}>",inline=False)
-    embed.add_field(name="이전 내용",value=before.content,inline=False)
-    embed.add_field(name="바뀐 내용",value=after.content,inline=False)
-    channel=bot.get_channel(channel_id)
+    embed.add_field(name="이전 내용",value=resb,inline=False)
+    embed.add_field(name="바뀐 내용",value=resa,inline=False)
     await channel.send(embed=embed)
 #@bot.command(name='판정')
 #async def rollDiceAlt2(ctx, min: int, max: int, num: int = 1, exp: str=''):
@@ -693,7 +689,7 @@ async def howDoThis(ctx,*args):
         await ctx.send('```어떻게 하시겠습니까?```')
 
 @bot.command(name='대',aliases=['ㄷ','e','대응'])
-async def howDoThis_Alt(ctx):
+async def howDoThisVariant(ctx):
     await ctx.message.delete()
     await ctx.send('```어떻게 대응하시겠습니까?```')
 
@@ -714,29 +710,34 @@ async def rayPenbar(ctx,name:str='마스터',reason:str='낙석'):
         sjon='로'
     else:
         sjon='으로'
-    if reason == '번개' or reason == '낙뢰':
-        await ctx.send(f'```{name}{fjon} 번개에 직격당하여 그만 사망하고 말았습니다```')
-    elif reason == '그냥':
-        t = roll(1,5,1)
-        match t:
-            case 1:
-                await ctx.send(f'```{name}이(가) 세계 밖으로 떨어졌습니다```')
-            case 2:
-                await ctx.send(f'```ZAPZAPZAP → {name}```')
-            case 3:
-                await ctx.send(f'```d/dx{name}```')
-            case 4:
-                await ctx.send(f'```{name} 아웃, {name} 아웃```')
-            case 5:
-                await ctx.send(f'```{name}의 마음이 무너졌어...```')
-    elif reason == 'paranoia' or reason == '파라노이아':
-        await ctx.send(f'```ZAPZAPZAP → {name}```')
-    elif reason == '/kill':
-        await ctx.send(f'```{name}이(가) 세계 밖으로 떨어졌습니다```')
-    elif reason == '루디':
-        await ctx.send(f'```{name}의 마음이 무너졌어...```')
-    else:
-        await ctx.send(f'```{name}{fjon} {reason}{sjon} 인해 그만 사망하고 말았습니다```')
+    match reason:
+        case '번개', '낙뢰':
+            await ctx.send(f'```{name}{fjon} 번개에 직격당하여 그만 사망하고 말았습니다```')
+        case '그냥':
+            t = roll(1,6,1)
+            match t:
+                case 1:
+                    await ctx.send(f'```{name}이(가) 세계 밖으로 떨어졌습니다```')
+                case 2:
+                    await ctx.send(f'```ZAPZAPZAP → {name}```')
+                case 3:
+                    await ctx.send(f'```d/dx{name}```')
+                case 4:
+                    await ctx.send(f'```{name} 아웃, {name} 아웃```')
+                case 5:
+                    await ctx.send(f'```{name}의 마음이 무너졌어...```')
+                case 6:
+                    await ctx.send(f'```굿바이... {name}')
+        case 'paranoia', '파라노이아':
+            await ctx.send(f'```ZAPZAPZAP → {name}```')
+        case '/kill':
+            await ctx.send(f'```{name}이(가) 세계 밖으로 떨어졌습니다```')
+        case '루디':
+            await ctx.send(f'```{name}의 마음이 무너졌어...```')
+        case '레이펜버':
+            await ctx.send(f'```굿바이... {name}')
+        case _:
+            await ctx.send(f'```{name}{fjon} {reason}{sjon} 인해 그만 사망하고 말았습니다```')
     if name=='마스터' or name=='드로니아' or name=='dronia':
         num = roll(1,100,1)
         if num == 92:
@@ -782,6 +783,12 @@ async def fuckOff(ctx,addition=0):
                 await ctx.send('던전의 불을 지필 시간')
             else:
                 await ctx.send('대구통구이')
+
+#천안문 이스터에그
+#@bot.tree.command(name='베이징올림픽', description='beijing', guilds=GUILDS)
+#@app_commands.describe() # 슬래시 커맨드 등록
+#async def 베이징올림픽(ctx): # 슬래시 커맨드 이름
+#    await ctx.response.send_message("我爱北京天安门.") # 인터렉션 응답
 
 @bot.command(name='던전',aliases=['던'])
 async def fuckOffVariant(ctx,addition=1):
