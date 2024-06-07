@@ -199,6 +199,9 @@ hti.screenshot(html_str=html, css_str=css, save_as='page.png')
 loggingChannel = {}
 loggingChannelHasChanged = defaultdict(lambda:False,{})
 firstRun = True
+battleChannel = {}
+battleStarted = defaultdict(lambda:False,{})
+battleAttr = defaultdict(lambda:[],{})
 # __file__ = 현재 이 파일의 경로
 # os.path.dirname(xxx) = xxx가 속해있는 디렉토리의 경로
 PATH = os.path.dirname(__file__)
@@ -209,6 +212,38 @@ with open(os.path.join(PATH, 'token.txt'), 'r') as f:
     TOKEN = f.read()
     # token.txt에 봇의 토큰을 입력해주세요.
 
+class __botNPCManager:
+    def __init__(self,gui): #gui = guild id
+        self.gui = gui
+        self.NPC = {} # (name:str, portrait:str (portrait path))
+        if os.path.exists(f'Data/{gui}/NPCslist.json'):
+            with open(f'Data/{gui}/NPCslist.json', encoding='utf-8') as j:
+                self.NPC = json.load(j)
+        else:
+            self.NPC = {}
+            with open(f'Data/{gui}/NPCslist.json', 'w', encoding='utf-8') as j:
+                json.dump(self.NPC, j, ensure_ascii=False)
+        print(f"botNPCManager for guild {gui} installed.")
+    async def registerNPC(self,id,name:str,portrait:discord.Attachment = None): #사용시 주의, 중복검사 안함
+        gui = self.gui
+        with open(f'Data/{gui}/NPCslist.json', 'w', encoding='utf-8') as j:
+            json.dump(self.NPC, j, ensure_ascii=False)
+        #if portrait.content_type != 'image/png':
+        #    portrait = None
+        #    self.NPC[id] = {name:name,portrait:None}
+        if portrait is not None:
+            await portrait.save(f'Data/{gui}/Illust/{id}.png')
+            self.NPC[id] = {"name":name,"portrait":f'Data/{gui}/Illust/{id}.png'}
+        else: self.NPC[id] = {"name":name,"portrait":None}
+        with open(f'Data/{gui}/NPCslist.json', 'w', encoding='utf-8') as j:
+            json.dump(self.NPC, j, ensure_ascii=False)
+    def deleteNPC(self,id):
+        gui = self.gui
+        os.remove(self.NPC[id]["portrait"])
+        del self.NPC[id]
+        with open(f'Data/{gui}/NPCslist.json', 'w', encoding='utf-8') as j:
+            json.dump(self.NPC, j, ensure_ascii=False)
+botNPCManager = {}
 async def main():
     dir = os.listdir('Cogs')
     for py in dir:
@@ -218,8 +253,14 @@ async def main():
 # guilds.txt에 서버 ID를 한 줄씩 적어주세요.
 with open(os.path.join(PATH, 'guilds.txt'), 'r') as f:
     GUILDS = list(f.read().split('\n'))
+#print(GUILDS)
 for g in GUILDS:
     #print(g)
+    try:
+        os.makedirs(f"Data/{g}/Illust")
+    except FileExistsError:
+        pass
+    botNPCManager[int(g)] = __botNPCManager(int(g))
     if os.path.exists(f'Data/data_{g}.json'):
         with open(f'Data/data_{g}.json', encoding='utf-8') as j:
             jsonData = json.load(j)
@@ -227,6 +268,8 @@ for g in GUILDS:
         continue
     loggingChannel[int(g)] = jsonData["LoggingChannel"]
 GUILDS = [discord.Object(id=i) for i in GUILDS]
+
+
 
 with open(os.path.join(PATH,'players.txt'),'r') as f:
     PLAYERS = list(f.read().split('\n'))
@@ -344,7 +387,52 @@ async def calcProb(min:int,max:int,bonus:int):
         return (va if va<100 else 100) if va>minimum else minimum
     else:
         return minimum
-    
+
+
+
+
+@bot.tree.command(name='registernpc', description='NPC를 등록합니다. 등록한 NPC는 /say의 대상으로 선택할 수 있습니다.',guilds=GUILDS)
+@app_commands.describe(id='대상 NPC의 id(구분자)입니다. NPC의 id는 고유해야 합니다.',name='대상 NPC의 이름입니다.',portrait='대상의 초상화입니다. say 사용시 같이 출력됩니다. png로 업로드해야 하며, 정사각형 이미지를 권장합니다.')
+@app_commands.checks.has_any_role('GM')
+async def registerNPC(interaction:discord.Interaction,id:str,name:str,portrait:discord.Attachment = None):
+    if portrait.content_type != 'image/png':
+        portrait = None
+    gui = interaction.guild_id
+    if not id in botNPCManager[gui].NPC:
+        await botNPCManager[gui].registerNPC(id,name,portrait)
+        await interaction.response.send_message('등록되었습니다.',ephemeral=True)
+    else:
+        await interaction.response.send_message('이미 존재하는 id입니다.',ephemeral=True)
+
+@bot.tree.command(name='deletenpc', description='등록된 NPC를 삭제합니다.',guilds=GUILDS)
+@app_commands.describe(id='대상 NPC의 id(구분자)입니다. NPC의 id는 고유함이 보장됩니다.')
+@app_commands.checks.has_any_role('GM')
+async def deleteNPC(interaction:discord.Interaction,id:str):
+    gui = interaction.guild_id
+    if not id in botNPCManager[gui].NPC:
+        await interaction.response.send_message('등록되지 않은 id입니다.',ephemeral=True)
+    else:
+        botNPCManager[gui].deleteNPC(id)
+        await interaction.response.send_message('삭제되었습니다.',ephemeral=True)
+
+@bot.tree.command(name='say', description='NPC에게 말을 시킵니다.',guilds=GUILDS)
+@app_commands.describe(id='대상 NPC의 id입니다.',text='대상의 대사입니다.')
+@app_commands.checks.has_any_role('GM')
+async def say(interaction:discord.Interaction,id:str,text:str): #말하기!
+    gui = interaction.guild_id
+    if not id in botNPCManager[gui].NPC:
+        await interaction.response.send_message('이 id를 가진 NPC가 존재하지 않습니다.',ephemeral=True)
+        return
+    name = botNPCManager[gui].NPC[id]["name"]
+    box = discord.Embed(colour=discord.Colour.default(),title=name,description=text)
+    if botNPCManager[gui].NPC[id]["portrait"] is not None:
+        f = discord.File(f'Data/{gui}/Illust/{id}.png',filename=f"portrait.png")
+        box.set_thumbnail(url=f'attachment://portrait.png')
+        await interaction.channel.send(file=f,embed=box)
+        await interaction.response.send_message('삐빅!',ephemeral=True)
+    else:
+        await interaction.channel.send(embed=box)
+        await interaction.response.send_message('삐빅!',ephemeral=True)
 
 @bot.tree.command(name='querydice', description='The bot inquires the targeting player to roll the dice, one or more.',guilds=GUILDS)
 @app_commands.describe(target='굴림 요청의 대상입니다.',min='주사위의 최소치입니다.', max='주사위의 최대치입니다.', num='주사위의 개수입니다. 기본값은 1입니다.', bonus='보너스/패널티입니다. 이 숫자만큼 최종 결과를 증/감합니다.', bonusdesc='보너스가 발생한 사유입니다. 없다면 따로 표시되지 않습니다.',bonus2='2번째 보너스입니다.',bonus2desc='placeholder',bonus3='3번째 보너스입니다.',bonus3desc='placeholder')
@@ -391,7 +479,7 @@ class exprErrorParen(Exception):
     def __str__(self):
         return 'ExprError: ' + self.message
 
-class tooMuchRecurrance(Exception):
+class tooManyRecurrance(Exception):
     def __init__(self, message='괄호 개수가 왜이래'):
         self.message = message
 
@@ -409,6 +497,7 @@ async def subRollDiceFunc(recur,die,val,opt,query):
     skipTO = False #skip til next operator
     calcMin = False
     isParen = False
+    percent = False
     parens = 1
     firstHalf = 0
     debug = False
@@ -490,6 +579,11 @@ async def subRollDiceFunc(recur,die,val,opt,query):
                 continue
             else:
                 raise exprError
+        elif query[i] in '%':
+            if i == 0 or not query[i-1].isdigit() or skipTO or (i+1 < len(query) and query[i+1] in 'd'):
+                raise exprError
+            percent = True
+            continue
         elif query[i] in '+-/*':
             if query[i-1] in ')':
                 pass
@@ -509,7 +603,11 @@ async def subRollDiceFunc(recur,die,val,opt,query):
                 dmin = 1
             else:
                 if tv != []:
-                    val.append(''.join(tv))
+                    if not percent:
+                        val.append(''.join(tv))
+                    else:
+                        val.append(str(eval(''.join(tv)+"/100")))
+                        percent = False
                     tv = []
             opt.append(query[i])
             continue
@@ -549,12 +647,16 @@ async def subRollDiceFunc(recur,die,val,opt,query):
                 die.append(str(dnum)+"d"+str(dmax))
             val.append(str(roll(dmin,dmax,dnum)))
         else:
-            val.append(''.join(tv))
+            if not percent:
+                val.append(''.join(tv))
+            else:
+                val.append(str(eval(''.join(tv)+"/100")))
+                percent = False
             tv = []
 
 async def subRollDiceAlt2(recur,query):
     if recur > 6:
-        raise tooMuchRecurrance
+        raise tooManyRecurrance
     if query.isdigit():
         return query
     die = [] #주사위
@@ -593,14 +695,21 @@ async def rollDiceAlt2(ctx, *args):
             if i != len(val)-1:
                 res = res + opt[i]
         if res == str(eval(res)):
-            await ctx.send(f"다음 쿼리를 처리합니다: `{query}`\n결과: `{res}`", reference=ctx.message, mention_author=False)
+            if int(res) == float(res):
+                await ctx.send(f"다음 쿼리를 처리합니다: `{query}`\n결과: `{res}`", reference=ctx.message, mention_author=False)
+            else:
+                await ctx.send(f"다음 쿼리를 처리합니다: `{query}`\n결과: `{res:.2f}`", reference=ctx.message, mention_author=False)
         else:
-            await ctx.send(f"다음 쿼리를 처리합니다: `{query}`\n결과: `{res}={eval(res)}`", reference=ctx.message, mention_author=False)
+            res2 = eval(res)
+            if int(res2) == float(res2):
+                await ctx.send(f"다음 쿼리를 처리합니다: `{query}`\n결과: `{res}={res2}`", reference=ctx.message, mention_author=False)
+            else:
+                await ctx.send(f"다음 쿼리를 처리합니다: `{query}`\n결과: `{res}={res2:.2f}`", reference=ctx.message, mention_author=False)
     except exprError:
         await ctx.send("표현식이 올바르지 않습니다.", reference=ctx.message, mention_author=False)
     except isDigit:
         await ctx.send(f"다음 쿼리는 상수입니다: `{query}`", reference=ctx.message, mention_author=False)
-    except tooMuchRecurrance:
+    except tooManyRecurrance:
         await ctx.send("괄호는 최대 6번 중첩시킬 수 있습니다.", reference=ctx.message, mention_author=False)
     except exprErrorParen:
         await ctx.send("괄호 안에는 하나 이상의 표현식이 존재해야 합니다.", reference=ctx.message, mention_author=False)
@@ -636,7 +745,51 @@ async def registerLogChannel(interaction: discord.Interaction):
     jsonData["LoggingChannel"] = cha
     with open(f'Data/data_{gui}.json', 'w', encoding='utf-8') as j:
         json.dump(jsonData, j, ensure_ascii=False)
-    await interaction.response.send_message(f"로깅 채널을 <#{cha}>로 설정했습니다.`",ephemeral=True)
+    await interaction.response.send_message(f"로깅 채널을 <#{cha}>로 설정했습니다.",ephemeral=True)
+
+"""
+@bot.tree.command(name='registerbattle', description='명령어를 사용한 채널에서 전투를 시작합니다.', guilds=GUILDS)
+@app_commands.describe()
+async def registerBattle(interaction: discord.Interaction):
+    global battleStarted
+    if battleStarted:
+        await interaction.response.send_message(f"이미 진행중인 전투가 있습니다.",ephemeral=True)
+    gui = interaction.guild_id
+    battleStarted[gui] = True
+    cha = interaction.channel_id
+    if os.path.exists(f'Data/data_{gui}.json'):
+        with open(f'Data/data_{gui}.json', encoding='utf-8') as j:
+            jsonData = json.load(j)
+    else:
+        jsonData = {}
+    jsonData["InBattle"] = True
+    jsonData["BattleChannel"] = cha
+    with open(f'Data/data_{gui}.json', 'w', encoding='utf-8') as j:
+        json.dump(jsonData, j, ensure_ascii=False)
+    await interaction.response.send_message(f"<#{cha}>에서 전투를 시작합니다.\n```현재 턴: 1턴```")
+
+@bot.tree.command(name='registercooldown', description='전투에 사용되는 기술의 쿨다운을 등록합니다.', guilds=GUILDS)
+@app_commands.describe()
+
+@bot.tree.command(name='endbattle', description='전투를 끝냅니다.', guilds=GUILDS)
+@app_commands.describe()
+async def registerBattle(interaction: discord.Interaction):
+    global battleStarted
+    if not battleStarted:
+        await interaction.response.send_message(f"진행중인 전투가 없습니다.",ephemeral=True)
+    gui = interaction.guild_id
+    battleStarted[gui] = False
+    if os.path.exists(f'Data/data_{gui}.json'):
+        with open(f'Data/data_{gui}.json', encoding='utf-8') as j:
+            jsonData = json.load(j)
+    else:
+        jsonData = {}
+    jsonData["InBattle"] = False
+    jsonData["BattleChannel"] = -1
+    with open(f'Data/data_{gui}.json', 'w', encoding='utf-8') as j:
+        json.dump(jsonData, j, ensure_ascii=False)
+    await interaction.response.send_message(f"전투를 종료합니다.")
+"""
 
 @bot.event
 async def on_message_delete(message):
@@ -658,7 +811,7 @@ async def on_message_delete(message):
 async def on_message_edit(before, after):
     if after.content == None or after.content == "":
         return
-    channel_id = getLoggingChannel[before.guild.id]
+    channel_id = getLoggingChannel(before.guild.id)
     channel=bot.get_channel(channel_id)
     resb = before.content
     resa = after.content
