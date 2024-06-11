@@ -224,17 +224,20 @@ class __botNPCManager:
             with open(f'Data/{gui}/NPCslist.json', 'w', encoding='utf-8') as j:
                 json.dump(self.NPC, j, ensure_ascii=False)
         print(f"botNPCManager for guild {gui} installed.")
-    async def registerNPC(self,id,name:str,portrait:discord.Attachment = None): #사용시 주의, 중복검사 안함
+    async def registerNPC(self,id,name:str,portrait:discord.Attachment = None,subtitle:str = None): #사용시 주의, 중복검사 안함
         gui = self.gui
-        with open(f'Data/{gui}/NPCslist.json', 'w', encoding='utf-8') as j:
-            json.dump(self.NPC, j, ensure_ascii=False)
         #if portrait.content_type != 'image/png':
         #    portrait = None
         #    self.NPC[id] = {name:name,portrait:None}
         if portrait is not None:
             await portrait.save(f'Data/{gui}/Illust/{id}.png')
-            self.NPC[id] = {"name":name,"portrait":f'Data/{gui}/Illust/{id}.png'}
-        else: self.NPC[id] = {"name":name,"portrait":None}
+            self.NPC[id] = {"name":name,"portrait":f'Data/{gui}/Illust/{id}.png',"subtitle":subtitle}
+        else: self.NPC[id] = {"name":name,"portrait":None,"subtitle":subtitle}
+        with open(f'Data/{gui}/NPCslist.json', 'w', encoding='utf-8') as j:
+            json.dump(self.NPC, j, ensure_ascii=False)
+    def setSubtitle(self,id,subtitle:str):
+        gui = self.gui
+        self.NPC[id]["subtitle"] = subtitle
         with open(f'Data/{gui}/NPCslist.json', 'w', encoding='utf-8') as j:
             json.dump(self.NPC, j, ensure_ascii=False)
     def deleteNPC(self,id):
@@ -392,17 +395,28 @@ async def calcProb(min:int,max:int,bonus:int):
 
 
 @bot.tree.command(name='registernpc', description='NPC를 등록합니다. 등록한 NPC는 /say의 대상으로 선택할 수 있습니다.',guilds=GUILDS)
-@app_commands.describe(id='대상 NPC의 id(구분자)입니다. NPC의 id는 고유해야 합니다.',name='대상 NPC의 이름입니다.',portrait='대상의 초상화입니다. say 사용시 같이 출력됩니다. png로 업로드해야 하며, 정사각형 이미지를 권장합니다.')
+@app_commands.describe(id='대상 NPC의 id(구분자)입니다. NPC의 id는 고유해야 합니다.',name='대상 NPC의 이름입니다.',portrait='대상의 초상화입니다. say 사용시 같이 출력됩니다. png로 업로드해야 하며, 정사각형 이미지를 권장합니다.',subtitle='NPC의 별칭입니다. /say 사용 시 이름 위에 표시됩니다.')
 @app_commands.checks.has_any_role('GM')
-async def registerNPC(interaction:discord.Interaction,id:str,name:str,portrait:discord.Attachment = None):
+async def registerNPC(interaction:discord.Interaction,id:str,name:str,portrait:discord.Attachment = None,subtitle:str = None):
     if portrait.content_type != 'image/png':
         portrait = None
     gui = interaction.guild_id
     if not id in botNPCManager[gui].NPC:
-        await botNPCManager[gui].registerNPC(id,name,portrait)
+        await botNPCManager[gui].registerNPC(id,name,portrait,subtitle)
         await interaction.response.send_message('등록되었습니다.',ephemeral=True)
     else:
         await interaction.response.send_message('이미 존재하는 id입니다.',ephemeral=True)
+
+@bot.tree.command(name='setsubtitle', description='등록된 NPC의 별칭을 추가하거나 수정합니다.',guilds=GUILDS)
+@app_commands.describe(id='대상 NPC의 id(구분자)입니다. NPC의 id는 고유함이 보장됩니다.',subtitle='NPC의 별칭입니다. /say 사용 시 이름 위에 표시됩니다.')
+@app_commands.checks.has_any_role('GM')
+async def npcSetSubtitle(interaction:discord.Interaction,id:str,subtitle:str):
+    gui = interaction.guild_id
+    if not id in botNPCManager[gui].NPC:
+        await interaction.response.send_message('등록되지 않은 id입니다.',ephemeral=True)
+    else:
+        botNPCManager[gui].setSubtitle(id,subtitle)
+        await interaction.response.send_message('수정되었습니다.',ephemeral=True)
 
 @bot.tree.command(name='deletenpc', description='등록된 NPC를 삭제합니다.',guilds=GUILDS)
 @app_commands.describe(id='대상 NPC의 id(구분자)입니다. NPC의 id는 고유함이 보장됩니다.')
@@ -425,6 +439,8 @@ async def say(interaction:discord.Interaction,id:str,text:str): #말하기!
         return
     name = botNPCManager[gui].NPC[id]["name"]
     box = discord.Embed(colour=discord.Colour.default(),title=name,description=text)
+    if botNPCManager[gui].NPC[id]["subtitle"] is not None:
+        box.set_author(name = botNPCManager[gui].NPC[id]["subtitle"])
     if botNPCManager[gui].NPC[id]["portrait"] is not None:
         f = discord.File(f'Data/{gui}/Illust/{id}.png',filename=f"portrait.png")
         box.set_thumbnail(url=f'attachment://portrait.png')
