@@ -13,188 +13,6 @@ from html2image import Html2Image
 
 hti = Html2Image()
 
-html = """<!DOCTYPE html> <html>  <head>     <style>         
-
-  
-
-  @import url('https://fonts.googleapis.com/css2?family=Diphylleia&amp;family=Nanum+Gothic&display=swap');         
-
-  
-
-  body {background-color: #f0f0f0}
-
-  html {height: 100%;}
-
-  
-
-  .container {display: flex; align-items: center; justify-content: center; height: 100%;}
-
-  
-
-  .status-box {text-align: center;
-
-    background-color: rgba(0, 0, 0, 0.5);
-
-    color: #fff;
-
-    background-size: 100% 100%;
-
-    width: 500px;
-
-    max-width: 100%;
-
-    border-radius: 24px;
-
-    box-shadow: 0px 0px 10px 10px rgba(0, 0, 0, 0.5);
-
-    background-position: center;
-
-    display: inline-block;
-
-    padding-left: 4%;
-
-    padding-right: 4%;
-
-    padding-top: 10px;
-
-    padding-bottom: 10px;
-
-    margin-top: 2em;
-
-    margin-bottom: 2em;
-
-  }
-
-  
-
-  .status-box .content {
-
-    font-family: 'Diphylleia', serif;
-
-    color: #fff;
-
-    text-align: center;
-
-    line-height: 2em;
-
-  }
-
- 
-
-  .content span:nth-of-type(1), .content span:nth-of-type(5){
-
-    font-family: 'Diphylleia', serif;
-
-    color: #fae0d4;
-
-    font-style: italic;
-
-    font-size: 1.1em;
-
-    font-weight: normal;
-
-    animation: twinkling1 2s infinite; }
-
-  
-
-  .content span:nth-of-type(3), .content span:nth-of-type(7){
-
-    font-family: 'Diphylleia', serif;
-
-    color: #fff1eb;
-
-    font-style: italic;
-
-    font-size: 1.1em;
-
-    font-weight: normal;
-
-    animation: twinkling2 2s infinite;
-
-  }
-
-  
-
-  .content span:nth-of-type(even){
-
-    color: #ffffff;
-
-    font-family: 'Nanum Gothic', sans-serif;
-
-    font-size: 1em;
-
-    font-weight: 400;
-
-  }
-
-  
-
-  .status-box img {
-
-    max-width: 100%;
-
-    height: auto;
-
-    display: block;
-
-    margin: auto;
-
-    padding-top: 5%;
-
-    padding-bottom: 5%;
-
-  }
-
-  
-
-  @keyframes twinkling1 {
-
-    0% {opacity: 1;} 50% {opacity: 0.7;} 100% {opacity: 1;}
-
-  }
-
-  
-
-  @keyframes twinkling2 {
-
-    0% {opacity: 0.7;} 50% {opacity: 1;} 100% {opacity: 0.7;}
-
-  }
-
-  
-
-  </style> </head> <body>
-
-  <div class="container">
-
-    <div class="status-box">
-
-      <img src="https://i.imgur.com/1ThwEp4.png">
-
-      <div class="content">
-
-        <span>&nbsp;Name:</span><span>&nbsp;&nbsp;$2</span><br>
-        
-        <span>&nbsp;$3:</span><span>&nbsp;&nbsp;$4</span><br>
-
-        <span>&nbsp;$5:</span><span>&nbsp;&nbsp;$6</span><br>
-
-        <span>&nbsp;$7:</span><span>&nbsp;&nbsp;$8</span>
-
-      </div>
-
-      <img src="https://i.imgur.com/O5ZWSvf.png">
-
-    </div>
-
-  </div>
-
-  </body>  </html>"""
-css = """body{}"""
-
-# screenshot an HTML string (css is optional)
-hti.screenshot(html_str=html, css_str=css, save_as='page.png')
-
 #client = discord.Client(intents=discord.Intents.all())
 loggingChannel = {}
 loggingChannelHasChanged = defaultdict(lambda:False,{})
@@ -242,7 +60,8 @@ class __botNPCManager:
             json.dump(self.NPC, j, ensure_ascii=False)
     def deleteNPC(self,id):
         gui = self.gui
-        os.remove(self.NPC[id]["portrait"])
+        if self.NPC[id]["portrait"] is not None:
+            os.remove(self.NPC[id]["portrait"])
         del self.NPC[id]
         with open(f'Data/{gui}/NPCslist.json', 'w', encoding='utf-8') as j:
             json.dump(self.NPC, j, ensure_ascii=False)
@@ -880,7 +699,7 @@ async def rayPenbar(ctx,name:str='마스터',reason:str='낙석'):
     else:
         sjon='으로'
     match reason:
-        case '번개', '낙뢰':
+        case '번개'|'낙뢰':
             await ctx.send(f'```{name}{fjon} 번개에 직격당하여 그만 사망하고 말았습니다```')
         case '그냥':
             t = roll(1,6,1)
@@ -897,14 +716,18 @@ async def rayPenbar(ctx,name:str='마스터',reason:str='낙석'):
                     await ctx.send(f'```{name}의 마음이 무너졌어...```')
                 case 6:
                     await ctx.send(f'```굿바이... {name}')
-        case 'paranoia', '파라노이아':
+        case 'paranoia'|'파라노이아':
             await ctx.send(f'```ZAPZAPZAP → {name}```')
         case '/kill':
             await ctx.send(f'```{name}이(가) 세계 밖으로 떨어졌습니다```')
         case '루디':
             await ctx.send(f'```{name}의 마음이 무너졌어...```')
         case '레이펜버':
-            await ctx.send(f'```굿바이... {name}')
+            await ctx.send(f'```굿바이... {name}```')
+        case '고죠'|'고죠사토루'|'스쿠나'|'더위사냥':
+            await ctx.send(f'```작별이다, {name}```')
+            time.sleep(2)
+            await ctx.send(f'```내가 없는 시대에 태어났을 뿐인 범부여```')
         case _:
             await ctx.send(f'```{name}{fjon} {reason}{sjon} 인해 그만 사망하고 말았습니다```')
     if name=='마스터' or name=='드로니아' or name=='dronia':
