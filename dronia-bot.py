@@ -31,6 +31,10 @@ with open(os.path.join(PATH, 'token.txt'), 'r') as f:
     # token.txt에 봇의 토큰을 입력해주세요.
 
 class __botNPCManager:
+    """
+    botNPCManager
+    NPC를 관리하는 클래스입니다.
+    """
     def __init__(self,gui): #gui = guild id
         self.gui = gui
         self.NPC = {} # (name:str, portrait:str (portrait path))
@@ -58,6 +62,11 @@ class __botNPCManager:
         self.NPC[id]["subtitle"] = subtitle
         with open(f'Data/{gui}/NPCslist.json', 'w', encoding='utf-8') as j:
             json.dump(self.NPC, j, ensure_ascii=False)
+    def deleteSubtitle(self,id):
+        gui = self.gui
+        self.NPC[id]["subtitle"] = None
+        with open(f'Data/{gui}/NPCslist.json', 'w', encoding='utf-8') as j:
+            json.dump(self.NPC, j, ensure_ascii=False)
     def deleteNPC(self,id):
         gui = self.gui
         if self.NPC[id]["portrait"] is not None:
@@ -66,11 +75,7 @@ class __botNPCManager:
         with open(f'Data/{gui}/NPCslist.json', 'w', encoding='utf-8') as j:
             json.dump(self.NPC, j, ensure_ascii=False)
 botNPCManager = {}
-async def main():
-    dir = os.listdir('Cogs')
-    for py in dir:
-        if py.endswith('.py'):
-            await bot.load_extension(f'Cogs.{py[:-3]}')
+
 
 # guilds.txt에 서버 ID를 한 줄씩 적어주세요.
 with open(os.path.join(PATH, 'guilds.txt'), 'r') as f:
@@ -153,14 +158,7 @@ def dice(min: int, max: int, num: int, exp: str,rollcrit:bool=False):
         text = '\n'.join(textList)
     return text
 
-@bot.event
-async def on_ready():
-    for guild in GUILDS:
-        await bot.tree.sync(guild=guild)
-    print('Logged in as')
-    print(bot.user.name)
-    print(bot.user.id)
-    print('------')
+
 
 
 
@@ -211,9 +209,10 @@ async def calcProb(min:int,max:int,bonus:int):
         return minimum
 
 
+# npc subcommand
+npc_group = app_commands.Group(name='npc', description='NPC를 관리합니다.')
 
-
-@bot.tree.command(name='registernpc', description='NPC를 등록합니다. 등록한 NPC는 /say의 대상으로 선택할 수 있습니다.',guilds=GUILDS)
+@npc_group.command(name='register', description='NPC를 등록합니다. 등록한 NPC는 /say의 대상으로 선택할 수 있습니다.')
 @app_commands.describe(id='대상 NPC의 id(구분자)입니다. NPC의 id는 고유해야 합니다.',name='대상 NPC의 이름입니다.',portrait='대상의 초상화입니다. say 사용시 같이 출력됩니다. png로 업로드해야 하며, 정사각형 이미지를 권장합니다.',subtitle='NPC의 별칭입니다. /say 사용 시 이름 위에 표시됩니다.')
 @app_commands.checks.has_any_role('GM')
 async def registerNPC(interaction:discord.Interaction,id:str,name:str,portrait:discord.Attachment = None,subtitle:str = None):
@@ -226,7 +225,9 @@ async def registerNPC(interaction:discord.Interaction,id:str,name:str,portrait:d
     else:
         await interaction.response.send_message('이미 존재하는 id입니다.',ephemeral=True)
 
-@bot.tree.command(name='setsubtitle', description='등록된 NPC의 별칭을 추가하거나 수정합니다.',guilds=GUILDS)
+
+
+@npc_group.command(name='setsubtitle', description='등록된 NPC의 별칭을 추가하거나 수정합니다.')
 @app_commands.describe(id='대상 NPC의 id(구분자)입니다. NPC의 id는 고유함이 보장됩니다.',subtitle='NPC의 별칭입니다. /say 사용 시 이름 위에 표시됩니다.')
 @app_commands.checks.has_any_role('GM')
 async def npcSetSubtitle(interaction:discord.Interaction,id:str,subtitle:str):
@@ -237,7 +238,28 @@ async def npcSetSubtitle(interaction:discord.Interaction,id:str,subtitle:str):
         botNPCManager[gui].setSubtitle(id,subtitle)
         await interaction.response.send_message('수정되었습니다.',ephemeral=True)
 
-@bot.tree.command(name='deletenpc', description='등록된 NPC를 삭제합니다.',guilds=GUILDS)
+@npcSetSubtitle.autocomplete('id')
+async def npcSetSubtitle_autocomplete(interaction:discord.Interaction, current:str) -> list[app_commands.Choice[str]]:
+    arr = botNPCManager[interaction.guild_id].NPC.keys()
+    return [app_commands.Choice(name=id,value=id) for id in arr if current in id]
+
+@npc_group.command(name='delsubtitle', description='등록된 NPC의 별칭을 삭제합니다.')
+@app_commands.describe(id='대상 NPC의 id(구분자)입니다. NPC의 id는 고유함이 보장됩니다.')
+@app_commands.checks.has_any_role('GM')
+async def deleteSubtitle(interaction:discord.Interaction,id:str):
+    gui = interaction.guild_id
+    if not id in botNPCManager[gui].NPC:
+        await interaction.response.send_message('등록되지 않은 id입니다.',ephemeral=True)
+    else:
+        botNPCManager[gui].deleteSubtitle(id)
+        await interaction.response.send_message('삭제되었습니다.',ephemeral=True)
+
+@deleteSubtitle.autocomplete('id')
+async def deleteSubtitle_autocomplete(interaction:discord.Interaction, current:str) -> list[app_commands.Choice[str]]:
+    arr = botNPCManager[interaction.guild_id].NPC.keys()
+    return [app_commands.Choice(name=id,value=id) for id in arr if current in id]
+
+@npc_group.command(name='delete', description='등록된 NPC를 삭제합니다.')
 @app_commands.describe(id='대상 NPC의 id(구분자)입니다. NPC의 id는 고유함이 보장됩니다.')
 @app_commands.checks.has_any_role('GM')
 async def deleteNPC(interaction:discord.Interaction,id:str):
@@ -247,6 +269,11 @@ async def deleteNPC(interaction:discord.Interaction,id:str):
     else:
         botNPCManager[gui].deleteNPC(id)
         await interaction.response.send_message('삭제되었습니다.',ephemeral=True)
+
+@deleteNPC.autocomplete('id')
+async def deleteNPC_autocomplete(interaction:discord.Interaction, current:str) -> list[app_commands.Choice[str]]:
+    arr = botNPCManager[interaction.guild_id].NPC.keys()
+    return [app_commands.Choice(name=id,value=id) for id in arr if current in id]
 
 @bot.tree.command(name='say', description='NPC에게 말을 시킵니다.',guilds=GUILDS)
 @app_commands.describe(id='대상 NPC의 id입니다.',text='대상의 대사입니다.')
@@ -268,6 +295,12 @@ async def say(interaction:discord.Interaction,id:str,text:str): #말하기!
     else:
         await interaction.channel.send(embed=box)
         await interaction.response.send_message('삐빅!',ephemeral=True)
+
+@say.autocomplete('id')
+async def say_autocomplete(interaction:discord.Interaction, current:str) -> list[app_commands.Choice[str]]:
+    arr = botNPCManager[interaction.guild_id].NPC.keys()
+    return [app_commands.Choice(name=id,value=id) for id in arr if current in id]
+
 
 @bot.tree.command(name='querydice', description='The bot inquires the targeting player to roll the dice, one or more.',guilds=GUILDS)
 @app_commands.describe(target='굴림 요청의 대상입니다.',min='주사위의 최소치입니다.', max='주사위의 최대치입니다.', num='주사위의 개수입니다. 기본값은 1입니다.', bonus='보너스/패널티입니다. 이 숫자만큼 최종 결과를 증/감합니다.', bonusdesc='보너스가 발생한 사유입니다. 없다면 따로 표시되지 않습니다.',bonus2='2번째 보너스입니다.',bonus2desc='placeholder',bonus3='3번째 보너스입니다.',bonus3desc='placeholder')
@@ -694,7 +727,7 @@ async def rayPenbar(ctx,name:str='마스터',reason:str='낙석'):
         fjon='은'
     if not (44032<=ord(name[-1])<=55203):
         sjon='(으)로'
-    elif (ord(reason[-1])-44032)%28==0:
+    elif (ord(reason[-1])-44032)%28==0|(ord(reason[-1])-44032)%28==8:
         sjon='로'
     else:
         sjon='으로'
@@ -822,5 +855,28 @@ async def fuckOffVariant(ctx,addition=1):
 #@bot.command(name='증거인멸',aliases=['증'])
 #async def deleteMsg(ctx, sec=0.2):
 #    await ctx.message.delete()
+
+async def main():
+    dir = os.listdir('Cogs')
+    for py in dir:
+        if py.endswith('.py'):
+            await bot.load_extension(f'Cogs.{py[:-3]}')
+    
+@bot.event
+async def on_ready():
+    
+    bot.tree.add_command(npc_group)
+    for guild in GUILDS:
+        bot.tree.copy_global_to(guild=guild)
+        await bot.tree.sync(guild=guild)
+        #debug message - show all commands in the tree
+        #print(bot.tree.get_commands())
+    bot.tree.clear_commands(guild=None)
+    await bot.tree.sync()
+    print('Logged in as')
+    print(bot.user.name)
+    print(bot.user.id)
+    print('------')
+
 asyncio.run(main())
 bot.run(TOKEN)
