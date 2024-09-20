@@ -276,17 +276,21 @@ async def deleteNPC_autocomplete(interaction:discord.Interaction, current:str) -
     return [app_commands.Choice(name=id,value=id) for id in arr if current in id]
 
 @bot.tree.command(name='say', description='NPC에게 말을 시킵니다.',guilds=GUILDS)
-@app_commands.describe(id='대상 NPC의 id입니다.',text='대상의 대사입니다.')
+@app_commands.describe(id='대상 NPC의 id입니다.',text='대상의 대사입니다.',spoiler='대상 이름을 ???로 가릴지 지정합니다.')
 @app_commands.checks.has_any_role('GM')
-async def say(interaction:discord.Interaction,id:str,text:str): #말하기!
+async def say(interaction:discord.Interaction,id:str,text:str,spoiler:bool=False): #말하기!
     gui = interaction.guild_id
     if not id in botNPCManager[gui].NPC:
         await interaction.response.send_message('이 id를 가진 NPC가 존재하지 않습니다.',ephemeral=True)
         return
     name = botNPCManager[gui].NPC[id]["name"]
+    if spoiler:
+        name = "???"
     box = discord.Embed(colour=discord.Colour.default(),title=name,description=text)
     if botNPCManager[gui].NPC[id]["subtitle"] is not None:
         box.set_author(name = botNPCManager[gui].NPC[id]["subtitle"])
+        if spoiler:
+            box.remove_author()
     if botNPCManager[gui].NPC[id]["portrait"] is not None:
         f = discord.File(f'Data/{gui}/Illust/{id}.png',filename=f"portrait.png")
         box.set_thumbnail(url=f'attachment://portrait.png')
@@ -761,6 +765,14 @@ async def rayPenbar(ctx,name:str='마스터',reason:str='낙석'):
             await ctx.send(f'```작별이다, {name}```')
             time.sleep(2)
             await ctx.send(f'```내가 없는 시대에 태어났을 뿐인 범부여```')
+        case '신창섭':
+            await ctx.send(f'```과징금 크악```')
+            time.sleep(1)
+            await ctx.send(f'```씨이 빨```')
+            time.sleep(1)
+            await ctx.send(f'```바로 {name} 정상화```')
+            time.sleep(1)
+            await ctx.send(f'```OUT!!```')
         case _:
             await ctx.send(f'```{name}{fjon} {reason}{sjon} 인해 그만 사망하고 말았습니다```')
     if name=='마스터' or name=='드로니아' or name=='dronia':
