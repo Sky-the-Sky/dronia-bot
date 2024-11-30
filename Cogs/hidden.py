@@ -36,6 +36,8 @@ class hiddenCommand(commands.Cog):
                 await ctx.send(file=discord.File('map 3.jpg'))
             case '남대륙':
                 await ctx.send(file=discord.File('map 4.jpg'))
+            case '곰치':
+                await ctx.send(file=discord.File('gomchi_map.png'))
             case _:
                 await ctx.send(file=discord.File('map 1.jpg'))
 

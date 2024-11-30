@@ -85,6 +85,7 @@ for g in GUILDS:
     #print(g)
     try:
         os.makedirs(f"Data/{g}/Illust")
+        os.makedirs(f"Data/{g}/Users")
     except FileExistsError:
         pass
     botNPCManager[int(g)] = __botNPCManager(int(g))
@@ -158,7 +159,40 @@ def dice(min: int, max: int, num: int, exp: str,rollcrit:bool=False):
         text = '\n'.join(textList)
     return text
 
-
+def dice_customized(cdice:list, num:int, exp:str, rollcrit:bool=True):
+    if not (set(' +-/*0123456789.') > set(exp)):
+        return '수식이 정상적이지 않은 것 같습니다.'
+    elif (exp != '') and (exp.strip()[0] not in set('+-/*')):
+        return '첫 글자가 연산자여야 합니다.'
+    expText = exp.replace('*', '\*')
+    if num <= 1:
+        result = eval('cdice[random.randrange(0,len(cdice))]' + exp)
+        rexp = exp.replace('+','-') if '+' in exp else exp.replace('-','+')
+        if rollcrit and (eval(f"{result}"+rexp)==12):
+            text = f'1~12 사이의 주사위를 굴려 **{eval(f"{result}"+rexp)}**(이)가 나왔습니다. **대성공입니다!**\n*(대성공(순수 값 12)은 모든 가중치를 무시하고 무조건 성공으로 처리됩니다.)*'
+        elif exp == '':
+            text = f'1~12 사이의 주사위를 굴려 {result}(이)가 나왔습니다.'
+        else:
+            text = f'1~12 사이의 주사위에 \'{expText}\' 연산을 하여 {result}(이)가 나왔습니다.'
+    else:
+        textList = [f'다음은 1~12 사이의 주사위를 {num}개 굴린 결과입니다.']
+        sum = 0
+        if exp != '':
+            exp = exp.strip()
+            textList[0] = f'다음은 1~12 사이의 주사위를 {num}개 굴리고 \'{expText}\' 연산을 한 결과입니다.'
+        for i in range(num):
+            result = eval('cdice[random.randrange(0,len(cdice))]' + exp)
+            rexp = exp.replace('+','-') if '+' in exp else exp.replace('-','+')
+            if rollcrit and (eval(f"{result}"+rexp)==12):
+                textList.append(f'{i+1}번째 주사위: **{eval(f"{result}"+rexp)}** (대성공)')
+            elif exp == '':
+                textList.append(f'{i+1}번째 주사위: {result}')
+            else:
+                textList.append(f'{i+1}번째 주사위 ({expText}): {result}')
+            sum += result
+        textList.append(f'주사위의 합계: {sum}')
+        text = '\n'.join(textList)
+    return text
 
 
 
@@ -326,7 +360,112 @@ async def rollDiceInquiry(interaction:discord.Interaction,target:discord.User,mi
     await interaction.response.send_message(embed=box,view=rB)
     rB.message = await interaction.original_response()
     
-    
+
+entropy_group = app_commands.Group(name='entropy', description='엔트로피를 관리합니다.')
+
+@entropy_group.command(name='config', description='엔트로피 설정을 변경합니다.')
+@app_commands.describe(config='변경할 설정입니다.',value='변경할 값입니다.')
+async def configEntropy(interaction:discord.Interaction,config:str,value:str):
+    gui = interaction.guild_id
+    pid = interaction.user.id
+    with open(f'Data/{gui}/Users/{pid}/entropy.json', encoding='utf-8') as j:
+        jsonData = json.load(j)
+    if config == 'maxEntropy':
+        jsonData["maxEntropy"] = int(value)
+    elif config == 'entropyBiasDice': # for each [entropyBiasValue] increase, 1d[12-entropyBiasMin-1]+[entropyBiasMin-1] is added to ^ㅍ's 1d12 roll
+        jsonData["entropyBiasDice"] = int(value)
+    elif config == 'entropyBiasValue':
+        jsonData["entropyBiasValue"] = int(value)
+    elif config == 'entropyBiasMin': # ex) if 10, 1d3+9 is added to ^ㅍ's 1d12 roll, thus [1,2,3,4,5,6,7,8,9,10,11,12,(10,11,12)]
+        jsonData["entropyBiasMin"] = int(value)
+    with open(f'Data/{gui}/Users/{pid}/entropy.json', 'w', encoding='utf-8') as j:
+        json.dump(jsonData, j, ensure_ascii=False)
+    await interaction.response.send_message('변경되었습니다.',ephemeral=True)
+
+@configEntropy.autocomplete('config')
+async def configEntropy_autocomplete(interaction:discord.Interaction, current:str) -> list[app_commands.Choice[str]]:
+    return [app_commands.Choice(name='최대 엔트로피',value='maxEntropy'),app_commands.Choice(name='엔트로피 판정 가중치 사용',value='entropyBiasDice'),app_commands.Choice(name='판정 가중치 당 엔트로피 증분 요구량',value='entropyBiasValue'),app_commands.Choice(name='판정 가중치 최솟값',value='entropyBiasMin')]
+
+@entropy_group.command(name='reset', description='엔트로피를 0으로 초기화합니다.')
+async def resetEntropy(interaction:discord.Interaction):
+    gui = interaction.guild_id
+    pid = interaction.user.id
+    try:
+        with open(f'Data/{gui}/Users/{pid}/entropy.json', encoding='utf-8') as j:
+            jsonData = json.load(j)
+    except FileNotFoundError:
+        try:
+            os.makedirs(f'Data/{gui}/Users/{pid}')
+        except FileExistsError:
+            pass
+        jsonData = {}
+        jsonData["maxEntropy"] = 31
+        jsonData["entropy"] = 0
+        jsonData["entropyBiasDice"] = 0
+        jsonData["entropyBiasValue"] = 1
+        jsonData["entropyBiasMin"] = 7
+    jsonData["entropy"] = 0
+    if "entropyBiasDice" in jsonData and jsonData["entropyBiasDice"] == 1:
+        jsonData["biasedDice"] = list(range(1,13))
+    with open(f'Data/{gui}/Users/{pid}/entropy.json', 'w', encoding='utf-8') as j:
+        json.dump(jsonData, j, ensure_ascii=False)
+    await interaction.response.send_message('엔트로피가 초기화되었습니다.',ephemeral=True)
+
+@entropy_group.command(name='add', description='엔트로피를 추가합니다.')
+@app_commands.describe(value='추가할 엔트로피의 양입니다.')
+async def addEntropy(interaction:discord.Interaction,value:int):
+    gui = interaction.guild_id
+    pid = interaction.user.id
+    with open(f'Data/{gui}/Users/{pid}/entropy.json', encoding='utf-8') as j:
+        jsonData = json.load(j)
+    jsonData["entropy"] = jsonData["entropy"] + value
+    if jsonData["entropy"] > jsonData["maxEntropy"]:
+        value = value - (jsonData["entropy"] - jsonData["maxEntropy"])
+        jsonData["entropy"] = jsonData["maxEntropy"]
+    jsonData["lastEditValue"] = value
+    if jsonData["entropyBiasDice"] == 1:
+        diff = value // jsonData["entropyBiasValue"]
+        jsonData["lastEditBias"] = []
+        for _ in range(0,diff):
+            t = roll(jsonData["entropyBiasMin"],12,1)
+            jsonData["biasedDice"].append(t)
+            jsonData["lastEditBias"].append(t)
+        jsonData["biasedDice"].sort()
+    with open(f'Data/{gui}/Users/{pid}/entropy.json', 'w', encoding='utf-8') as j:
+        json.dump(jsonData, j, ensure_ascii=False)
+    embed = discord.Embed(title='현재 엔트로피',description=f'{jsonData["entropy"]}/{jsonData["maxEntropy"]}', color=discord.Colour.default())
+    await interaction.response.send_message(f'**엔트로피 +{value}**',embed=embed)
+
+@entropy_group.command(name='undo', description='최근의 연산을 취소합니다.')
+async def undoEntropy(interaction:discord.Interaction):
+    gui = interaction.guild_id
+    pid = interaction.user.id
+    with open(f'Data/{gui}/Users/{pid}/entropy.json', encoding='utf-8') as j:
+        jsonData = json.load(j)
+    if jsonData["lastEditValue"] == 0:
+        await interaction.response.send_message('최근의 연산이 없습니다.',ephemeral=True)
+        return
+    jsonData["entropy"] = jsonData["entropy"] - jsonData["lastEditValue"]
+    jsonData["lastEditValue"] = 0
+    if jsonData["entropyBiasDice"] == 1:
+        for i in jsonData["lastEditBias"]:
+            jsonData["biasedDice"].remove(i)
+    with open(f'Data/{gui}/Users/{pid}/entropy.json', 'w', encoding='utf-8') as j:
+        json.dump(jsonData, j, ensure_ascii=False)
+    embed = discord.Embed(title='현재 엔트로피',description=f'{jsonData["entropy"]}/{jsonData["maxEntropy"]}', color=discord.Colour.default())
+    await interaction.response.send_message('최근의 연산을 취소했습니다.',embed=embed)
+
+@entropy_group.command(name='show', description='현재 엔트로피 상태를 보여줍니다.')
+async def showEntropy(interaction:discord.Interaction):
+    gui = interaction.guild_id
+    pid = interaction.user.id
+    with open(f'Data/{gui}/Users/{pid}/entropy.json', encoding='utf-8') as j:
+        jsonData = json.load(j)
+    embed = discord.Embed(title='현재 엔트로피',description=f'{jsonData["entropy"]}/{jsonData["maxEntropy"]}', color=discord.Colour.default())
+    if jsonData["entropyBiasDice"] == 1:
+        embed.add_field(name='엔트로피 주사위',value=f'{jsonData["biasedDice"]}')
+    await interaction.response.send_message(embed=embed)
+
 @bot.command(name='ㅈ',aliases=['주사위'])
 async def rollDice2(ctx, min: int, max: int, num: int = 1, exp: str='',rollcrit:bool=False):
     await ctx.send(dice(min, max, num,exp,rollcrit), reference=ctx.message, mention_author=False)
@@ -592,7 +731,15 @@ async def rollDiceAlt2(ctx, *args):
 
 @bot.command(name='ㅍ',aliases=['판정','ㅍㅈ'])
 async def rollDiceVariant(ctx, min:str ="1", max:int = 1, num:int = 1, exp:str=''):
-    if min.isdigit():
+    with open(f'Data/{ctx.guild.id}/Users/{ctx.author.id}/entropy.json', encoding='utf-8') as j:
+        jsonData = json.load(j)
+    if jsonData["entropyBiasDice"] == 1 and not min.isdigit():
+        if not "biasedDice" in jsonData:
+            jsonData["biasedDice"] = list(range(1,13))
+            with open(f'Data/{ctx.guild.id}/{Users}/{ctx.author.id}/entropy.json', 'w', encoding='utf-8') as j:
+                json.dump(jsonData, j, ensure_ascii=False)
+        await ctx.send(dice_customized(jsonData["biasedDice"],max,min), reference=ctx.message, mention_author=False)
+    elif min.isdigit():
         if max == int(min):
             max = 12
         await ctx.send(dice(int(min),max,num,exp,True), reference=ctx.message, mention_author=False)
@@ -878,6 +1025,7 @@ async def main():
 async def on_ready():
     
     bot.tree.add_command(npc_group)
+    bot.tree.add_command(entropy_group)
     for guild in GUILDS:
         bot.tree.copy_global_to(guild=guild)
         await bot.tree.sync(guild=guild)
