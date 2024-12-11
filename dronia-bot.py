@@ -731,14 +731,23 @@ async def rollDiceAlt2(ctx, *args):
 
 @bot.command(name='ㅍ',aliases=['판정','ㅍㅈ'])
 async def rollDiceVariant(ctx, min:str ="1", max:int = 1, num:int = 1, exp:str=''):
-    with open(f'Data/{ctx.guild.id}/Users/{ctx.author.id}/entropy.json', encoding='utf-8') as j:
-        jsonData = json.load(j)
-    if jsonData["entropyBiasDice"] == 1 and not min.isdigit():
+    try:
+        with open(f'Data/{ctx.guild.id}/Users/{ctx.author.id}/entropy.json', encoding='utf-8') as j:
+            jsonData = json.load(j)
+    except FileNotFoundError:
+        jsonData = {}
+    if "entropyBiasDice" in jsonData and jsonData["entropyBiasDice"] == 1 and not min.isdigit():
         if not "biasedDice" in jsonData:
             jsonData["biasedDice"] = list(range(1,13))
             with open(f'Data/{ctx.guild.id}/{Users}/{ctx.author.id}/entropy.json', 'w', encoding='utf-8') as j:
                 json.dump(jsonData, j, ensure_ascii=False)
         await ctx.send(dice_customized(jsonData["biasedDice"],max,min), reference=ctx.message, mention_author=False)
+    elif "entropyBiasDice" in jsonData and jsonData["entropyBiasDice"] == 1 and min.isdigit():
+        if not "biasedDice" in jsonData:
+            jsonData["biasedDice"] = list(range(1,13))
+            with open(f'Data/{ctx.guild.id}/{Users}/{ctx.author.id}/entropy.json', 'w', encoding='utf-8') as j:
+                json.dump(jsonData, j, ensure_ascii=False)
+        await ctx.send(dice_customized(jsonData["biasedDice"],int(min),''), reference=ctx.message, mention_author=False)
     elif min.isdigit():
         if max == int(min):
             max = 12
