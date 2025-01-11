@@ -42,7 +42,7 @@ class hiddenCommand(commands.Cog):
                 await ctx.send(file=discord.File('map 1.jpg'))
 
             
-    @commands.command(name='재생',aliases=['브금','play','p','bgm'])
+    @commands.command(name='재생_deprecated')
     async def play(self,ctx,mus=''):
         author = ctx.author
         if ctx.voice_client is not None:
