@@ -39,7 +39,7 @@ class hiddenCommand(commands.Cog):
             case '곰치':
                 await ctx.send(file=discord.File('gomchi_map.png'))
             case _:
-                await ctx.send(file=discord.File('map 1.png'))
+                await ctx.send(file=discord.File('map 1.jpg'))
 
             
     @commands.command(name='재생_deprecated')
