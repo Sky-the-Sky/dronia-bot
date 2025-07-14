@@ -5,7 +5,8 @@ import discord
 import asyncio
 import time
 import datetime
-from collections import defaultdict
+import re
+from collections import defaultdict, deque
 from discord import app_commands
 from discord.ext import commands
 from html2image import Html2Image
@@ -75,6 +76,56 @@ class __botNPCManager:
         with open(f'Data/{gui}/NPCslist.json', 'w', encoding='utf-8') as j:
             json.dump(self.NPC, j, ensure_ascii=False)
 botNPCManager = {}
+
+# 미완성 클래스
+
+class __karmaData:
+    """
+    karmaData
+    userKarmaManager에서 사용될 업보 데이터의 물리적/추상적 저장소를 관리합니다.
+    """
+    length = 20
+
+    def __init__(self,json = None):
+        if json == None:
+            # json을 넘겨받지 못한 경우
+            self.roll_history = defaultdict(lambda: defaultdict(lambda: deque(maxlen = self.length)))
+        else:
+            self.roll_history = defaultdict(lambda: defaultdict(lambda: deque(maxlen = self.length)))
+    
+    def __serialize(self):
+        pass
+        
+
+    def __expr__(self):
+        pass
+
+
+class __userKarmaManager:
+    """
+    userKarmaManager
+    유저의 주사위 굴림 양상을 관리하는 클래스입니다.
+    """
+    def __init__(self,guid,uid):
+        self.gui = guid
+        self.uid = uid
+        self.karma = None
+        self.filePath = f'Data/{guid}/Users/{uid}/Karma.json'
+        if os.path.exists(self.filePath):
+            with open(self.filePath, encoding='utf-8') as j:
+                self.karma = json.load(j)
+        else:
+            self.karma = __karmaData()
+            with open(self.filePath, 'w', encoding='utf-8') as j:
+                json.dump(self.karma, j, ensure_ascii=False)
+    
+    def save(self):
+        with open(self.filePath, 'w', encoding='utf-8') as j:
+            json.dump(self.karma, j, ensure_ascii=False)
+        
+    def get_karmic_data(self):
+        pass
+        
 
 
 # guilds.txt에 서버 ID를 한 줄씩 적어주세요.
@@ -470,6 +521,8 @@ async def showEntropy(interaction:discord.Interaction):
 async def rollDice2(ctx, min: int, max: int, num: int = 1, exp: str='',rollcrit:bool=False):
     await ctx.send(dice(min, max, num,exp,rollcrit), reference=ctx.message, mention_author=False)
     
+
+# "GOTO STATEMENT CONSIDERED HARMFUL" HARMFUL lmao
 class isDigit(Exception):
     def __init__(self, message='상수를 왜 넣어 임마'):
         self.message = message
@@ -497,235 +550,134 @@ class tooManyRecurrance(Exception):
     def __str__(self):
         return 'RecurError: ' + self.message
 
-async def subRollDiceFunc(recur,die,val,opt,query):
-    if len(query) == 0:
-        raise exprError
-    tv = []
-    paren = []
-    dnum = 0
-    dmax = 0
-    dmin = 1 #for default
-    skipTO = False #skip til next operator
-    calcMin = False
-    isParen = False
-    percent = False
-    parens = 1
-    firstHalf = 0
-    debug = False
-    for i in range(0,len(query)):
-        if debug:
-            print(f'현재 처리 중: {query[i]}')
-        if query[i] in ')':
-            parens = parens - 1
-            if parens != 0:
-                paren.append(query[i])
-                continue
-            if not isParen:
+def tokenize(expr:str):
+    tokens = re.findall(r'\d+d\[\d+\.\.\d+\]|\d+d\d+|\d+|[()+\-*/%]', expr)
+    return tokens
+
+# 스스로 불러온 재 앙 에 짓 눌 려
+def style_ansi_roll(val, lo, hi):
+    RESET = "\u001b[0m"
+    if hi - lo == 0:
+        return f"\u001b[3;37m{val}{RESET}"
+    rate = (val-lo)/(hi-lo+1)
+    if val == hi:
+        return f"\u001b[1;31m{val}{RESET}"  # 빨강: 최고값
+    elif rate >= 0.75:
+        return f"\u001b[35m{val}{RESET}"
+    elif rate > 0.25:
+        return f"\u001b[37m{val}{RESET}"
+    elif val == lo:
+        return f"\u001b[3;34m{val}{RESET}"  # 파랑: 최저값
+    else:
+        return f"\u001b[36m{val}{RESET}"
+
+def parse_to_rpn(tokens):
+    # 우선순위 - (*, /) > (+, -)
+    out = []
+    stack = []
+    prec = {'+': 1, '-': 1, '*': 2, '/': 2}
+    for tok in tokens:
+        if re.match(r'\d+d\d+|\d+d\[\d+\.\.\d+\]|\d+', tok):
+            out.append(tok)
+        elif tok in prec:
+            while stack and stack[-1] != '(' and prec.get(stack[-1], 0) >= prec[tok]:
+                out.append(stack.pop())
+            stack.append(tok)
+        elif tok == '(' or tok == '%':
+            stack.append(tok)
+        elif tok == ')':
+            while stack and stack[-1] != '(':
+                out.append(stack.pop())
+            if not stack:
                 raise exprError
-            if paren == []:
-                raise exprErrorParen
-            val.append(await subRollDiceAlt2(recur+1,''.join(paren)))
-            isParen = False
-            if debug:
-                print(f'parentheses 닫힘.')
-            continue
-        if isParen:
-            if query[i] in '(':
-                parens = parens + 1
-            paren.append(query[i])
-            if debug:
-                print(f'paren 배열 진입: {query[i]}')
-            continue
-        if query[i] in '(':
-            parens = 1
-            if tv != []:
-                if not skipTO:
-                    val.append(''.join(tv))
-                    tv = []
-                    opt.append('*')
-                else:
-                    dmax = eval(''.join(tv))
-                    tv = []
-                    skipTO=False
-                    if calcMin:
-                        if dmin>dmax:
-                            raise exprError
-                        die.append(f"{dnum}d[{dmin}..{dmax}]")
-                        calcMin = False
-                        firstHalf = 0
-                    else:
-                        die.append(str(dnum)+"d"+str(dmax))
-                    val.append(str(roll(dmin,dmax,dnum)))
-                    dmin = 1
-                    opt.append('*')
-            if query[i-1] in ')':
-                opt.append('*')
-            paren = []
-            isParen = True
-            if debug:
-                print(f'parentheses 열림.')
-            continue
-        if query[i] in '[':
-            if skipTO:
-                if tv != []:
-                    raise exprError
-                calcMin = True
-                firstHalf = 0
-                continue
-            else:
-                raise exprError
-        elif query[i] == '.':
-            if skipTO and firstHalf < 2 and calcMin:
-                firstHalf = firstHalf + 1
-                if firstHalf == 1:
-                    if tv == []:
-                        raise exprError
-                    dmin = eval(''.join(tv))
-                    tv=[]
-                continue
-            else:
-                raise exprError
-        elif query[i] in ']':
-            if skipTO and firstHalf == 2 and calcMin and tv != []:
-                continue
-            else:
-                raise exprError
-        elif query[i] in '%':
-            if i == 0 or not query[i-1].isdigit() or skipTO or (i+1 < len(query) and query[i+1] in 'd'):
-                raise exprError
-            percent = True
-            continue
-        elif query[i] in '+-/*':
-            if query[i-1] in ')':
-                pass
-            elif skipTO:
-                dmax = eval(''.join(tv))
-                tv = []
-                skipTO=False
-                if calcMin:
-                    if dmin>dmax:
-                        raise exprError
-                    die.append(f"{dnum}d[{dmin}..{dmax}]")
-                    calcMin = False
-                    firstHalf = 0
-                else:
-                    die.append(str(dnum)+"d"+str(dmax))
-                val.append(str(roll(dmin,dmax,dnum)))
-                dmin = 1
-            else:
-                if tv != []:
-                    if not percent:
-                        val.append(''.join(tv))
-                    else:
-                        val.append(str(eval(''.join(tv)+"/100")))
-                        percent = False
-                    tv = []
-            opt.append(query[i])
-            continue
-        if skipTO:
-            if query[i].isdigit():
-                tv.append(query[i])
-            else:
-                raise exprError
-            continue
-        if query[i].isdigit():
-            if query[i-1] in ')':
-                opt.append('*')
-            tv.append(query[i])
-            continue
-        if query[i] == 'd' or query[i] == 'D' or query[i] == 'ㅇ':
-            dnum = eval(''.join(tv))
-            tv = []
-            skipTO = True
-        else:
+            stack.pop()
+    while stack:
+        if stack[-1] == '(':
             raise exprError
-    if isParen:
-        raise exprError
-    if query[-1] in '+-/*':
-        raise exprError
-    if tv != []:
-        if skipTO:
-            dmax = eval(''.join(tv))
-            tv = []
-            skipTO=False
-            if calcMin:
-                if dmin>dmax:
-                    raise exprError
-                die.append(f"{dnum}d[{dmin}..{dmax}]")
-                calcMin = False
-                firstHalf = 0
-            else:
-                die.append(str(dnum)+"d"+str(dmax))
-            val.append(str(roll(dmin,dmax,dnum)))
+        out.append(stack.pop())
+    return out
+
+def roll_expr(token):
+    if re.match(r'(\d+)d\[(\d+)\.\.(\d+)\]', token):
+        n, lo, hi = map(int, re.findall(r'\d+', token))
+    elif re.match(r'(\d+)d(\d+)', token):
+        n, hi = map(int, re.findall(r'\d+', token))
+        lo = 1
+    else:
+        return int(token)
+    return sum(random.randint(lo, hi) for _ in range(n))
+
+def roll_expr_verbose(token):
+    if re.match(r'(\d+)d\[(\d+)\.\.(\d+)\]', token):
+        n, lo, hi = map(int, re.findall(r'\d+', token))
+    elif re.match(r'(\d+)d(\d+)', token):
+        n, hi = map(int, re.findall(r'\d+', token))
+        lo = 1
+    else:
+        return int(token), str(token)
+
+    results = [random.randint(lo, hi) for _ in range(n)]
+    styled = [style_ansi_roll(val, lo, hi) for val in results]
+    return sum(results), f"{token}⇒{style_ansi_roll(sum(results),lo*len(results),hi*len(results))}[{', '.join(styled)}]"
+
+def evaluate_rpn(rpn):
+    stack = []
+    for tok in rpn:
+        if tok in '+-*/':
+            b = stack.pop()
+            a = stack.pop()
+            stack.append(eval(f"{a}{tok}{b}"))
+        elif tok == "%":
+            a = stack.pop()
+            stack.append(a / 100)
         else:
-            if not percent:
-                val.append(''.join(tv))
-            else:
-                val.append(str(eval(''.join(tv)+"/100")))
-                percent = False
-            tv = []
+            stack.append(roll_expr(tok))
+    return stack[0]
 
-async def subRollDiceAlt2(recur,query):
-    if recur > 6:
-        raise tooManyRecurrance
-    if query.isdigit():
-        return query
-    die = [] #주사위
-    val = [] #값
-    #tv = [] # temp 값
-    opt = [] #연산자
-    #viter = 0
-    #oiter = 0
-    await subRollDiceFunc(recur,die,val,opt,query)
-    res = ""
-    for i in range(0,len(val)):
-        res = res + val[i]
-        if i != len(val)-1:
-            res = res + opt[i]
-    return str(eval(res))
+def evaluate_rpn_verbose(rpn):
+    stack = []
+    steps = []
 
-@bot.command(name='ㅈㅅ',aliases=['주사위식','주식','ㅅ','r','ㄱ'])
+    for tok in rpn:
+        if tok in '+-*/':
+            b, b_expr = stack.pop()
+            a, a_expr = stack.pop()
+            result = eval(f"{a}{tok}{b}")
+            stack.append((result, f"({a_expr} {tok} {b_expr})"))
+        elif tok == '%':
+            a, a_expr = stack.pop()
+            result = a / 100
+            stack.append((result, f"({a_expr} / 100)"))
+        else:
+            val, val_expr = roll_expr_verbose(tok)
+            stack.append((val, val_expr))
+    return stack[0]  # (value, expr_str)
+
+def evaluate(expr:str):
+    return evaluate_rpn(parse_to_rpn(tokenize(expr)))
+
+
+
+@bot.command(name='ㅈㅅㅌ',aliases=['주사위식','주식','ㅅ','r', 'dexpr', 'dexp'])
 async def rollDiceAlt2(ctx, *args):
     query = ''.join(args)
     try:
-        if query.isdigit():
+        if query.isdigit() or (query[1:].isdigit() and query[0] == '-'):
             raise isDigit
-        die = [] #주사위
-        val = [] #값
-        #tv = [] # temp 값
-        opt = [] #연산자
-        #viter = 0
-        #oiter = 0
-        await subRollDiceFunc(0,die,val,opt,query)
-        res = ""
-        print(die)
-        print(val)
-        print(opt)
-        for i in range(0,len(val)):
-            res = res + val[i]
-            if i != len(val)-1:
-                res = res + opt[i]
-        if res == str(eval(res)):
-            if int(res) == float(res):
-                await ctx.send(f"다음 쿼리를 처리합니다: `{query}`\n결과: `{res}`", reference=ctx.message, mention_author=False)
-            else:
-                await ctx.send(f"다음 쿼리를 처리합니다: `{query}`\n결과: `{res:.2f}`", reference=ctx.message, mention_author=False)
+        if ''.join(tokenize(query)) != query:
+            raise exprError
+        res_val, res_expr = evaluate_rpn_verbose(parse_to_rpn(tokenize(query)))
+        if int(res_val) == round(float(res_val), 2):
+            await ctx.send(f"다음 쿼리를 처리합니다: `{query}`\n굴림 결과 \n```ansi\n{res_expr}```\n결과: `{res_val}`", reference=ctx.message, mention_author=False)
         else:
-            res2 = eval(res)
-            if int(res2) == float(res2):
-                await ctx.send(f"다음 쿼리를 처리합니다: `{query}`\n결과: `{res}={res2}`", reference=ctx.message, mention_author=False)
-            else:
-                await ctx.send(f"다음 쿼리를 처리합니다: `{query}`\n결과: `{res}={res2:.2f}`", reference=ctx.message, mention_author=False)
+            await ctx.send(f"다음 쿼리를 처리합니다: `{query}`\n굴림 결과 \n```ansi\n{res_expr}```\n결과: `{res_val:.2f}`", reference=ctx.message, mention_author=False)
     except exprError:
         await ctx.send("표현식이 올바르지 않습니다.", reference=ctx.message, mention_author=False)
     except isDigit:
         await ctx.send(f"다음 쿼리는 상수입니다: `{query}`", reference=ctx.message, mention_author=False)
-    except tooManyRecurrance:
-        await ctx.send("괄호는 최대 6번 중첩시킬 수 있습니다.", reference=ctx.message, mention_author=False)
-    except exprErrorParen:
-        await ctx.send("괄호 안에는 하나 이상의 표현식이 존재해야 합니다.", reference=ctx.message, mention_author=False)
     finally:
         if ctx.channel.id == 1077942754254004246:
+            # coz trpg 서버 측 요청에 의한 예외처리
             await ctx.send("# 잠깐만요!\n여긴 봇 채널이 아닌 것 같아요.\n만약 채널을 착각하셨거나 의도하신 게 아니라면, 원활한 대화를 위해 <#1104426926396944464>로 가서 이 명령어를 써 주세요!",delete_after = 60)
             
 

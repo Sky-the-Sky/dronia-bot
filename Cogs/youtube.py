@@ -1,6 +1,7 @@
 import requests
 import random
 import io
+import asyncio
 import discord
 import os
 from yt_dlp import YoutubeDL
@@ -36,9 +37,13 @@ class mus():
             return
         try:
             # check file existence
-            self.path = f'{PATH}/{self.title}.m4a'
+            with YoutubeDL(ydl_opts) as ydl:
+                yt = ydl.sanitize_info(ydl.extract_info(self.url, download=False))
+                self.title = yt['title']
+            self.path = f'{self.title}.m4a'
             if self.path in chck:
                 self.cached = True
+                self.path = f"{PATH}/{self.title}.m4a"
                 return
         except:
             pass
@@ -46,6 +51,7 @@ class mus():
         with YoutubeDL(ydl_opts) as ydl:
             yt = ydl.sanitize_info(ydl.extract_info(self.url, download=True))
         self.path = f"{PATH}/{yt['title']}.m4a"
+        chck.append(self.path)
         self.title = yt['title']
         self.cached = True
         #except:
@@ -61,8 +67,9 @@ class mus():
 
 
 class youtubePlayerManager():
-    def __init__(self,guild):
+    def __init__(self,guild,bot):
         self.guild = guild
+        self.bot = bot
         self.playing = False
         self.queue = []
         self.voice_client = None
@@ -74,34 +81,77 @@ class youtubePlayerManager():
         self.voice_client = await channel.connect()
         return self.voice_client
     
-    def leave_channel(self):
+    async def leave_channel(self):
         self.queue = []
+        if self.voice_client is None:
+            return
         self.stop()
-        self.voice_client.disconnect()
+        await self.voice_client.disconnect()
         self.voice_client = None
 
-    def play(self, m):
+    async def play(self, ctx, m):
         if self.playing:
             self.queue.append(m)
             return
         if self.voice_client is None:
             return
         self.playing = True
-        def repeat(guild, voice, audio):
+        """def repeat(guild, voice, audio):
             voice.play(audio, after=lambda e: repeat(guild, voice, audio))
         def play_next(guild, voice):
             if len(self.queue) == 0:
                 self.playing = False
+                self.voice_client.disconnect()
+                self.voice_client = None
                 return
             m = self.queue.pop(0)
             audio = discord.FFmpegPCMAudio(m.path)
-            voice.play(audio, after=lambda e: play_next(guild, voice))
+            voice.play(audio, after=lambda e: play_next(guild, voice))"""
         audio = discord.FFmpegPCMAudio(m.path)
-        if repeat:
-            self.voice_client.play(audio, after=lambda e: repeat(self.guild, self.voice_client, audio))
+        self.current = audio
+        if self.repeat:
+            self.voice_client.play(audio, after=lambda e: self.after_pr(ctx, self.guild, self.voice_client, audio))
         else:
-            self.voice_client.play(audio, after=lambda e: play_next(self.guild, self.voice_client))
+            self.voice_client.play(audio, after=lambda e: self.after_pn(ctx, self.guild, self.voice_client))
+
+
+    async def play_repeat(self, ctx, guild, voice, audio):
+        await self.ensure_voice(ctx)
+        if not self.repeat:
+            self.playing = False
+            await self.voice_client.disconnect()
+            self.voice_client = None
+            return
+        voice.play(audio, after=lambda e: self.after_pr(ctx, self.guild, self.voice_client, audio))
+    async def play_next(self, ctx, guild, voice):
+        await self.ensure_voice(ctx)
+        if self.repeat:
+            await self.play_repeat(ctx, guild, voice, self.current)
+            return
+        if len(self.queue) == 0:
+            self.playing = False
+            await self.voice_client.disconnect()
+            self.voice_client = None
+            return
+        m = self.queue.pop(0)
+        audio = discord.FFmpegPCMAudio(m.path)
+        voice.play(audio, after=lambda e: self.after_pn(ctx, self.guild, self.voice_client))
     
+    def after_pr(self, ctx, guild, voice, audio):
+        cor = self.play_repeat(ctx, guild, voice, audio)
+        f = asyncio.run_coroutine_threadsafe(cor, self.bot.loop)
+        try:
+            f.result()
+        except:
+            pass
+    def after_pn(self, ctx, guild, voice):
+        cor = self.play_next(ctx, guild, voice)
+        f = asyncio.run_coroutine_threadsafe(cor, self.bot.loop)
+        try:
+            f.result()
+        except:
+            pass
+
     def stop(self):
         self.voice_client.stop()
         self.playing = False
@@ -115,18 +165,27 @@ class youtubePlayerManager():
     
     def skip(self):
         self.skip_to(1)
-
+    
+    async def ensure_voice(self, ctx):
+        if ctx.voice_client is None:
+            if ctx.author.voice:
+                await ctx.author.voice.channel.connect()
+            else:
+                await ctx.send("음성 채널에 들어가주세요.", reference=ctx.message, mention_author=False)
+                raise commands.CommandError("음성 채널에 들어가주세요.")
+        elif ctx.voice_client.is_playing():
+            ctx.voice_client.stop()
 
 class youtube(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.players = {}
         for guild in bot.guilds:
-            self.players[guild] = youtubePlayerManager(guild)
+            self.players[guild] = youtubePlayerManager(guild,self.bot)
     
     def get_player(self, guild):
         if guild not in self.players:
-            self.players[guild] = youtubePlayerManager(guild)
+            self.players[guild] = youtubePlayerManager(guild,self.bot)
         return self.players[guild]
     
     @commands.command(name='재생',aliases=['브금','play','p','bgm'])
@@ -138,7 +197,7 @@ class youtube(commands.Cog):
         if player.voice_client is None:
             res = await player.join_channel(ctx.author.voice.channel)
         m = mus(url, instant_cache=True)
-        player.play(m)
+        await player.play(ctx,m)
     
     @commands.command(name='멈춰')
     async def stop(self, ctx):
@@ -172,7 +231,7 @@ class youtube(commands.Cog):
     @commands.command(name='퇴장')
     async def leave(self, ctx):
         player = self.get_player(ctx.guild)
-        player.leave_channel()
+        await player.leave_channel()
 
 async def setup(bot):
     await bot.add_cog(youtube(bot))
